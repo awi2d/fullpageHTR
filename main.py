@@ -6,6 +6,8 @@ import Models
 import tensorflow as tf
 import keras.losses
 
+import time
+
 # <debug functions>
 
 
@@ -63,7 +65,10 @@ def train(model, saveName, x_train, y_train, val):
         monitor='val_loss', min_delta=0, patience=2, verbose=0,
         mode='auto', baseline=None, restore_best_weights=True
     )
-    model.fit(x_train, y_train, epochs=100, steps_per_epoch=len(x_train), callbacks=[callback], validation_data=val)
+    start_time = time.clock()
+    model.fit(x_train, y_train, epochs=128, steps_per_epoch=len(x_train), callbacks=[callback], validation_data=val)
+    dt = time.clock()-start_time
+    print(saveName, " took ", dt, "s to fit")
     model.save(saveName+".h5")
 
 
@@ -86,7 +91,7 @@ def infer(name):
     print("point = ", points)
     show_points_data([(img, points)], encoding_func=Dataloader.dense2points)
 
-    #test_x = [np.pad(img, ((0, input_size[0]-img.shape[0]), (0, input_size[1]-img.shape[1])), mode='constant', constant_values=255) for img in test_x]
+    # test_x = [np.pad(img, ((0, input_size[0]-img.shape[0]), (0, input_size[1]-img.shape[1])), mode='constant', constant_values=255) for img in test_x]
     print("test_x: ", type(test_x[0]))
     print("test_y: ", type(test_y[0]))
     loss, acc = model.evaluate(test_x, test_y, verbose=2)
