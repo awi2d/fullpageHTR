@@ -255,6 +255,7 @@ class img_types:
     line = 1
     paragraph = 2
 
+
 class dataset_names:
     iam = load_iam
 
