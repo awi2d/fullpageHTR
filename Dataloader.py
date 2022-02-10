@@ -244,7 +244,7 @@ def load_iam(dir, goldlabel_type):
             # line_split[0] ="a01-000u-00-00"
             # img_filename = "img\a01\a01-000u\a01-000u-00-00"
             img_filename_split = line_split[0].split("-")
-            img_filename = "img\\"+img_filename_split[0]+"\\"+img_filename_split[0]+"-"+img_filename_split[1]+"\\"+line_split[0]+".png"
+            img_filename = "img/"+img_filename_split[0]+"/"+img_filename_split[0]+"-"+img_filename_split[1]+"/"+line_split[0]+".png"
             if goldlabel_type == goldlabel_types.text:
                 goldlabel = ' '.join(line_split[8:])
             elif goldlabel_type == goldlabel_types.linepositions:
@@ -338,7 +338,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
             return None
         data = data[:maxcount]
     print("path_gl_short: ", getType(data))
-    data = [(load_img(dir+"\\"+path), goldlabel) for (path, goldlabel) in data]
+    data = [(load_img(dir+"/"+path), goldlabel) for (path, goldlabel) in data]
     print("imgword_gl: ", getType(data))
     if img_type == img_types.word:
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size)
