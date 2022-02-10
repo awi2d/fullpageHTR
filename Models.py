@@ -1,6 +1,7 @@
 import keras.losses
 import tensorflow as tf
 
+
 def getModel(name, input_size, output_length, loss=keras.losses.MeanSquaredError()):
     """
     :param name:
@@ -9,8 +10,30 @@ def getModel(name, input_size, output_length, loss=keras.losses.MeanSquaredError
     :return:
     A model with the defined architekture, that takes in an image and returns text
     """
-    #if name == modelNames.Find_Follow_Read_lite:
-    return findfollowreadlite(in_shape=input_size, out_length=output_length, lossfunc=loss)
+    if name not in name_modelfunc.keys():
+        print("Models.getModel: name ", name, " is not in ", name_modelfunc.keys())
+        return None
+    return name_modelfunc[name](in_shape=input_size, out_length=output_length)
+
+def findfollowreadlite_dense(in_shape=(1000, 2000), out_length=5):
+    """
+    :param in_shape:
+    (int, int): shape of the input image. This model will only work on grayscale images that have exacly this size
+    :param out_length:
+    the number of output neuros. currently should be len(encoding_one_linepoint)*maximum_number_of_lines
+    :return:
+    a tenserflow modell
+    """
+    inputs = keras.Input(shape=(in_shape[0],in_shape[1],), name="digits")  # keine ahnung warum (1,2,) statt (1,2)
+    in_rescaled = tf.keras.layers.Rescaling(1./255)(inputs)
+    x = tf.keras.layers.Dense(64, activation="relu")(in_rescaled)
+    outputs = tf.keras.layers.Dense(out_length, activation="tanh")(x)
+
+    model = keras.Model(inputs=inputs, outputs=outputs)
+    opt = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5)
+    loss_func = keras.losses.MeanSquaredError()
+    model.compile(loss=loss_func, optimizer=opt)
+    return model
 
 
 def findfollowreadlite(in_shape=(32, 128, 1), out_length=26, lr=0.0001, lossfunc=keras.losses.MeanSquaredError()):
@@ -54,6 +77,16 @@ def findfollowreadlite(in_shape=(32, 128, 1), out_length=26, lr=0.0001, lossfunc
     #TODO according to documentation MeanSquareError is only for one-hot encodings.
     return model
 
+
+def findfollowreadlite_cce(in_shape=(1000, 2000), out_length=5):
+    return findfollowreadlite(in_shape=in_shape, out_length=out_length, lossfunc=keras.losses.CategoricalCrossentropy())
+
+
+def findfollowreadlite_mse(in_shape=(1000, 2000), out_length=5):
+    return findfollowreadlite(in_shape=in_shape, out_length=out_length, lossfunc=keras.losses.MeanSquaredError())
+
+
+name_modelfunc = {"findfollowreadlite_cce": findfollowreadlite_cce, "findfollowreadlite_mse": findfollowreadlite_mse, "findfollowreadlite_dense": findfollowreadlite_dense}
 
 #TODO learn "Functional API" https://www.tensorflow.org/guide/keras/train_and_evaluate
 #inputs = keras.Input(shape=(784,), name="digits")

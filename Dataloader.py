@@ -1,16 +1,33 @@
 import cv2
 import numpy as np
-#TODO https://www.tensorflow.org/api_docs/python/tf/data/Dataset
-
+# TODO https://www.tensorflow.org/api_docs/python/tf/data/Dataset
+# TODO tf.keras.utils.image_dataset_from_directory nutzen
+# 125 GB RAM auf server (gesamt)
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-r=1
+#<debug functions>
+def getType(x):
+    if type(x).__name__ == 'list':
+        return '['+str(len(x))+":"+getType(x[0])+']'  # TODO assumes all element of the list have the same type
+    if type(x).__name__ == 'tuple':
+        r = '<'+str(len(x))+":"
+        for i in x:
+            r += getType(i)+'; '
+        return r[:-2] + '>'
+    if type(x).__name__ == 'ndarray':
+        return 'ndarray('+str(x.shape)+': '+getType(x[0])+')'
+    return type(x).__name__
+
+
+r = 1
 def random_choice(list):
     # looks kinda random, all results are equaly likely, but is always the same and didnt need any additional packages.
     global r
     r = (r+97)%251
     return list[r%len(list)]
+
+#</debug functions>
 
 def load_img(filename):
     img = cv2.imread(filename)
@@ -233,7 +250,7 @@ def load_iam(dir, goldlabel_type):
             elif goldlabel_type == goldlabel_types.linepositions:
                 width = int(line_split[5])
                 hight = int(line_split[6])
-                goldlabel = [((0, 0.5*hight), (width, 0.5*hight), hight)]
+                goldlabel = [((0, int(0.5*hight)), (width, int(0.5*hight)), hight)]
             else:
                 goldlabel = "TODO: invalid goldlabel_type in Dataloader.load_iam: "+str(goldlabel_type)
             word_img_gt.append((img_filename, goldlabel))
@@ -261,9 +278,10 @@ class dataset_names:
 
 def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
     data_dir = "..\\data"
+    #data_dir = "C:\\Users\\Idefix\\PycharmProjects\\SimpleHTR\\trainingDataset"
     data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=200, x_size=(1000, 2000))
-    train_val_split = int(0.9*len(data))  # 90% training, 9% validation, 1% test
-    val_test_split = int(0.99*len(data))
+    train_val_split = int(0.9*len(data))  # 80% training, 10% validation, 10% test
+    val_test_split = int(1*len(data))
     print("split: ", train_val_split, " : ", val_test_split, " : ", len(data))
     data_train = data[:train_val_split]
     data_val = data[train_val_split:val_test_split]
@@ -303,7 +321,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
     lines_per_paragrph = [2, 3, 4, 5, 6]
 
     data = dataset_loader(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
-    print("iam_data: ", len(data))
+    print("path_gl: ", getType(data))
     #print("data_imgpath_goldlabel = ", data[:5])
     # if goldlabel_type = text: type(data) = [(img: np.array(?, ?), text: string)]
     # if goldlabel_type = linepositions: type(data) = [(img: np.array(?, ?), [point: (int, int)])]
@@ -319,24 +337,35 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
             print("unexpected img_type: ", img_type)
             return None
         data = data[:maxcount]
+    print("path_gl_short: ", getType(data))
     data = [(load_img(dir+"\\"+path), goldlabel) for (path, goldlabel) in data]
+    print("imgword_gl: ", getType(data))
     if img_type == img_types.word:
-        return encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size)
+        print("imgwordenc_gl: ", getType(data))
+        return data
 
     tmp = [data[i:i+random_choice(words_per_line)] for i in range(0, len(data), max(words_per_line))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
     word_distance = [10, 100]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random_choice(word_distance) for unused in range(len(t))]) for t in tmp]
     #print("data_lines[0]: ", data[0])
     #print("data_imgline_goldlabel = ", data[:5])
+    print("imgline_gl: ", getType(data))
     if img_type == img_types.line:  # line
-        return encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=1)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=1)
+        print("imglineenc_gl: ", getType(data))
+        return data
 
     tmp = [data[i:i+random_choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
     line_distance = [5, 50]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random_choice(line_distance) for unused in range(len(t))]) for t in tmp]
+    print("imgpara_gl: ", getType(data))
     #print("data_parag[0]: ", data[0])
     #print("data_imgpara_goldlabel = ", data[:5])
     if img_type == img_types.paragraph:  # paragraph
-        return encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=max(lines_per_paragrph))
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=max(lines_per_paragrph))
+        print("imgparaenc_gl: ", getType(data))
+        return data
     return "Dataloader.getData: This return statement is impossible to reach."
 
+#TODO abstand nach oben und links
