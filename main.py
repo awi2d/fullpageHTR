@@ -68,10 +68,10 @@ def train(model, saveName, x_train, y_train, val):
         mode='auto', baseline=None, restore_best_weights=True
     )
     start_time = time.time()
-    model.fit(x_train, y_train, epochs=1, steps_per_epoch=len(x_train), callbacks=[callback], validation_data=val)
+    model.fit(x_train, y_train, epochs=128, steps_per_epoch=len(x_train), callbacks=[callback], validation_data=val)
     dt = time.time()-start_time
     print(saveName, " took ", dt, "s to fit")
-    model.save("../data/"+saveName+".h5")
+    model.save("../SimpleHTR/data/modles/"+saveName+".h5")
 
 
 def infer(name, decode_func=Dataloader.sparse2points):
