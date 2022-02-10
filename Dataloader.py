@@ -277,7 +277,7 @@ class dataset_names:
     iam = load_iam
 
 def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
-    data_dir = "..\\data"
+    data_dir = "../SimpleHTR/data/trainingDataset"
     #data_dir = "C:\\Users\\Idefix\\PycharmProjects\\SimpleHTR\\trainingDataset"
     data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=200, x_size=(1000, 2000))
     train_val_split = int(0.9*len(data))  # 80% training, 10% validation, 10% test
