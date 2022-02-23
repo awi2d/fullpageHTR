@@ -1,33 +1,102 @@
 import cv2
 import numpy as np
+import tensorflow as tf
+import random
+import tensorflow_datasets as tf_ds
 # TODO https://www.tensorflow.org/api_docs/python/tf/data/Dataset
 # TODO tf.keras.utils.image_dataset_from_directory nutzen
 # 125 GB RAM auf server (gesamt)
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
+#data_dir = "../SimpleHTR/data/trainingDataset"
+data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/trainingDataset"
+
+def point2spares(point: (int, int)):
+    r = [0]*(32*2)
+    r[point[0]] = 1
+    r[point[1]+32] = 1
+    return r
+def sparse2point(point: [float]):
+    x = 0
+    y = 0
+    for i in range(32):
+        if point[i] > point[x]:
+            x = i
+        if point[i+32] > point[y+32]:
+            y = i
+    return (x, y)
+
+def point2dense(point: (int, int)):
+    return (point[0]/32, point[1]/32)
+
+def dense2point(point: (float, float)):
+    return int(point[0]*32), int(point[1]*32)
+
 #<debug functions>
+
+def get_testdata(enc = point2dense):
+    size = 32
+    r = []
+    for i in range(size**2):
+        pos = (int(i/size), i%size)
+        #cv2.circle(img, center, radius, color)
+
+        img = np.full((size, size), 255, dtype='uint8')
+        cv2.circle(img, pos, 5, 0, thickness=5)
+        goldlabel = enc(pos)
+        r.append((img, goldlabel))
+        #r[i] = (cv2.circle(r[i][0], pos, 2, 0), (pos[0]/size, pos[1]/size))  # dense encoding
+    random.shuffle(r)
+    return r
+
+
 def getType(x):
-    if type(x).__name__ == 'list':
+    name = type(x).__name__
+    if name == 'list':
         return '['+str(len(x))+":"+getType(x[0])+']'  # TODO assumes all element of the list have the same type
-    if type(x).__name__ == 'tuple':
+    if name == 'tuple':
         r = '<'+str(len(x))+":"
         for i in x:
             r += getType(i)+'; '
         return r[:-2] + '>'
-    if type(x).__name__ == 'ndarray':
+    if name == 'ndarray':
         return 'ndarray('+str(x.shape)+': '+getType(x[0])+')'
-    return type(x).__name__
+    if name == 'BatchDataset':
+        return name  # TODO
+    return name
+
+
+def test_tfds():
+    dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/trainingDataset/paragraph_data"
+    train_ds = tf.keras.utils.image_dataset_from_directory(
+        dir,
+        validation_split=0.2,
+        subset="training",
+        seed=123,
+        image_size=(1626, 1132),  # = (img_height, img_width)
+        batch_size=128,
+        labels=None)  # TODO labels = None
+    # TODO zweites Dataset mit goldlabels
+    print("train_ds = ", train_ds)
+    print("type(train_ds) = ", getType(train_ds))
+    print("class_names = ", train_ds.class_names)
+    print("train_ds.element_spec= ", train_ds.element_spec)
+    print("train_ds length: ", len(train_ds))  # train_ds length: 2, anzahl der Bilder: 199
+    for elem in train_ds:
+        print("elem = ", getType(elem))  # elem =  EagerTensor
+        break
 
 
 r = 1
 def random_choice(list):
     # looks kinda random, all results are equaly likely, but is always the same and didnt need any additional packages.
     global r
-    r = (r+97)%251
+    r = (r+97)%251  # may not work correktly if len(list)%97=0 for multiple cals
     return list[r%len(list)]
 
 #</debug functions>
+
 
 def load_img(filename):
     img = cv2.imread(filename)
@@ -44,7 +113,7 @@ def txt2sparse(txt, alphabet, y_size):
     return np.array(b)
 
 
-def point2sparse(points: [line_point], max_x: int, max_y: int, y_size: int) -> [float]:
+def linepoint2sparse(points: [line_point], max_x: int, max_y: int, y_size: int) -> [float]:
     assert max([max(point[0][0], point[1][0]) for point in points]) < max_x
     assert max([max(point[0][1], point[1][1], point[2]) for point in points]) < max_y
     assert y_size >= len(points)
@@ -62,7 +131,7 @@ def point2sparse(points: [line_point], max_x: int, max_y: int, y_size: int) -> [
     return np.array(r)
 
 
-def sparse2points(points: [float], max_x: int, max_y: int) -> [line_point]:
+def sparse2linepoints(points: [float], max_x: int, max_y: int) -> [line_point]:
     point_length = 2*max_x+3*max_y
     points = [points[i:i+point_length] for i in range(0, len(points), point_length)]
     r = []
@@ -90,9 +159,9 @@ def sparse2points(points: [float], max_x: int, max_y: int) -> [line_point]:
     return r
 
 
-def point2dense(points: [line_point], max_x: int, max_y: int, y_size: int) -> [float]:
-    assert max([max(point[0][0], point[1][0]) for point in points]) < max_x
-    assert max([max(point[0][1], point[1][1], point[2]) for point in points]) < max_y
+def linepoint2dense(points: [line_point], max_x: int, max_y: int, y_size: int) -> [float]:
+    assert max([max(point[0][0], point[1][0]) for point in points]) <= max_x
+    assert max([max(point[0][1], point[1][1], point[2]) for point in points]) <= max_y
     assert y_size >= len(points)
 
     dp = [(xs/max_x, ys/max_y, xe/max_x, ye/max_y, h/max_y) for ((xs, ys), (xe, ye), h) in points]
@@ -106,7 +175,7 @@ def point2dense(points: [line_point], max_x: int, max_y: int, y_size: int) -> [f
     #    s.o.
 
 
-def dense2points(points: [float], max_x: int, max_y: int) -> [line_point]:
+def dense2linepoints(points: [float], max_x: int, max_y: int) -> [line_point]:
     assert len(points)%5 == 0
     return [((int(points[i]*max_x), int(points[i+1]*max_y)), (int(points[i+2]*max_x), int(points[i+3]*max_y)), int(points[i+4]*max_y)) for i in range(0, len(points), 5)]
 
@@ -135,9 +204,9 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
     elif goldlabel_type == goldlabel_types.linepositions:
         if goldlabel_encoding == goldlabel_encodings.dense:
-            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), point2dense(point, max_x=w, max_y=h, y_size=y_size)) for (img, point) in data]
+            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2dense(point, max_x=w, max_y=h, y_size=y_size)) for (img, point) in data]
         elif goldlabel_encoding == goldlabel_encodings.onehot:
-            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), point2sparse(point, w, h, y_size)) for (img, point) in data]
+            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2sparse(point, w, h, y_size)) for (img, point) in data]
         else:
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
     else:
@@ -153,7 +222,7 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
         axis == 0: images of data_sublist are appendend below each other.
         axis == 1: images of data_sublist are appendend right of other.
     :param pad:
-        pad[i] = amount of pad inserted after word/line i
+        pad[i] = amount of pad inserted befor word/line i
     :return:
         an element of the new data list
     """
@@ -169,7 +238,8 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
     goldlabel = None
     if axis == 0:
         w = max([img.shape[1] for img in img_list])
-        img_list = [np.pad(img_list[i], ((0, pad[i]), (0, w-img_list[i].shape[1])), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at right margin
+        # np.pad(np-array, ((oben, unten), (links, rechts)
+        img_list = [np.pad(img_list[i], ((pad[i], 0), (0, w-img_list[i].shape[1])), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at right margin
         if goldlabel_type == goldlabel_types.text:
             goldlabel = '<br>'.join(goldlabel_list)
         elif goldlabel_type == goldlabel_types.linepositions:
@@ -180,12 +250,11 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
                 pre_gl = goldlabel_list[i_gl][0]  # (startpoint, endpoint, height)
                 goldlabel[i_gl] = ((pre_gl[0][0], pre_gl[0][1]+offset), (pre_gl[1][0], pre_gl[1][1]+offset), pre_gl[2])
                 offset += pad[i_gl]+pre_gl[2]
-
         else:
             print("Dataloader.concat_data: goldlabel_type ", goldlabel_type, " is not valid")
     elif axis == 1:
         h = max([img.shape[0] for img in img_list])
-        img_list = [np.pad(img_list[i], ((0, h-img_list[i].shape[0]), (0, pad[i])), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
+        img_list = [np.pad(img_list[i], ((0, h-img_list[i].shape[0]), (pad[i], 0)), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
         if goldlabel_type == goldlabel_types.text:
             goldlabel = ' '.join(goldlabel_list)
         elif goldlabel_type == goldlabel_types.linepositions:
@@ -256,6 +325,24 @@ def load_iam(dir, goldlabel_type):
             word_img_gt.append((img_filename, goldlabel))
     return word_img_gt
 
+def store(img_gl_data, dir):
+    """
+    :param img_gl_data:
+    [(img: nparray, goldlabel) data that gets written to dir
+    :param dir:
+    direktory in that the data gets written
+    :return:
+    writes image_path - str(goldlabel) in dir_gl.txt
+    """
+    with open(dir+"/dir-gl.txt", 'w') as f:
+        i = 0
+        for (img, gl) in img_gl_data:
+            tpath = dir+"/"+str(i)+".png"
+            f.write(tpath+"-"+str(gl)+"\n")
+            cv2.imwrite(tpath, img)
+            i += 1
+    return None
+
 
 class goldlabel_types:
     text = 0
@@ -277,11 +364,15 @@ class dataset_names:
     iam = load_iam
 
 def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
-    data_dir = "../SimpleHTR/data/trainingDataset"
-    #data_dir = "C:\\Users\\Idefix\\PycharmProjects\\SimpleHTR\\trainingDataset"
-    data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=200, x_size=(1000, 2000))
-    train_val_split = int(0.9*len(data))  # 80% training, 10% validation, 10% test
-    val_test_split = int(1*len(data))
+    """
+    :param goldlabel_encoding:
+    from Dataset.goldlabel_encodings
+    :return:
+    (x_train, y_train), (x_val, y_val), (x_test), (y_test), so that tf.model.fit(x_train, y_train, validation_data=(x_val, y_val)) works.
+    """
+    data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=10, x_size=(1000, 2000))
+    train_val_split = int(0.8*len(data))  # 80% training, 10% validation, 10% test
+    val_test_split = int(0.9*len(data))
     print("split: ", train_val_split, " : ", val_test_split, " : ", len(data))
     data_train = data[:train_val_split]
     data_val = data[train_val_split:val_test_split]
@@ -296,7 +387,7 @@ def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
 
 
-def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.text, goldlabel_encoding=goldlabel_encodings.onehot, x_size = (1000, 1000), maxcount=-1):
+def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.text, goldlabel_encoding=goldlabel_encodings.onehot, x_size = (100, 100), maxcount=-1):
     """
     :param dataset_name:
         name of the dataset to use, currently only \"iam\" supported

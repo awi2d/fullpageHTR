@@ -24,7 +24,7 @@ def findfollowreadlite_dense(in_shape=(1000, 2000), out_length=5):
     :return:
     a tenserflow modell
     """
-    inputs = keras.Input(shape=(in_shape[0],in_shape[1],), name="digits")  # keine ahnung warum (1,2,) statt (1,2)
+    inputs = keras.Input(shape=(None, in_shape[0], in_shape[1],), name="digits")  # keine ahnung warum (1,2,) statt (1,2)
     in_rescaled = tf.keras.layers.Rescaling(1./255)(inputs)
     x = tf.keras.layers.Dense(64, activation="relu")(in_rescaled)
     outputs = tf.keras.layers.Dense(out_length, activation="tanh")(x)
@@ -36,12 +36,15 @@ def findfollowreadlite_dense(in_shape=(1000, 2000), out_length=5):
     return model
 
 
+# TODO learning rate anpassen
+# eingabe kleiner machen.
+# filter anzahl/größer machen
 def findfollowreadlite(in_shape=(32, 128, 1), out_length=26, lr=0.0001, lossfunc=keras.losses.MeanSquaredError()):
     model = tf.keras.models.Sequential()
 
     # Layer 1 Conv2D
     # model.add(Dropout(0.2, input_shape=input_shape))
-    model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in range(255)
+    model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
     model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", input_shape=in_shape, activation='tanh'))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
     model.add(tf.keras.layers.Dropout(0.4))
@@ -74,7 +77,6 @@ def findfollowreadlite(in_shape=(32, 128, 1), out_length=26, lr=0.0001, lossfunc
     # compile model
     opt = tf.keras.optimizers.Adam(learning_rate=lr, beta_1=0.5)
     model.compile(loss=lossfunc, optimizer=opt)  # metrics=['mean_squared_error']
-    #TODO according to documentation MeanSquareError is only for one-hot encodings.
     return model
 
 
