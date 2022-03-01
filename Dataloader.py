@@ -395,7 +395,7 @@ def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
     :return:
     (x_train, y_train), (x_val, y_val), (x_test), (y_test), so that tf.model.fit(x_train, y_train, validation_data=(x_val, y_val)) works.
     """
-    data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=10, x_size=(1000, 2000))
+    data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=200, x_size=(1000, 2000))
     train_val_split = int(0.8*len(data))  # 80% training, 10% validation, 10% test
     val_test_split = int(0.9*len(data))
     print("split: ", train_val_split, " : ", val_test_split, " : ", len(data))

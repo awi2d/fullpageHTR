@@ -50,6 +50,7 @@ def getDirSize(dir, size):
     size[dir] = 0
     return size
 
+
 def printDirSize():
     size = getDirSize("C:/", {})
     print("size = ", size)
@@ -61,4 +62,3 @@ def printDirSize():
                 print(str(k)+" - "+str(size[k]), file=f)
         except:
             print("cant print: unprintable")
-
