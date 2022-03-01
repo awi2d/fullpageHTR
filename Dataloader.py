@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 import random
-import tensorflow_datasets as tf_ds
+#import tensorflow_datasets as tf_ds
 # TODO https://www.tensorflow.org/api_docs/python/tf/data/Dataset
 # TODO tf.keras.utils.image_dataset_from_directory nutzen
 # 125 GB RAM auf server (gesamt)
