@@ -9,8 +9,32 @@ import tensorflow_datasets as tf_ds
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-#data_dir = "../SimpleHTR/data/trainingDataset"
-data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/trainingDataset"
+data_dir = "../SimpleHTR/data/trainingDataset"
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+iam_dir = data_dir+"iam/"  # the unchanged iam dataset
+dataset_dir = data_dir+"generated/"  # directoy for storing generated data
+models_dir = data_dir+"models/"  # directoy for storing trained models
+
+
+class goldlabel_types:
+    text = 0
+    linepositions = 1
+
+
+class goldlabel_encodings:
+    onehot = 0
+    dense = 1
+
+
+class img_types:
+    word = 0
+    line = 1
+    paragraph = 2
+
+
+class dataset_names:
+    iam = 0
+
 
 def point2spares(point: (int, int)):
     r = [0]*(32*2)
@@ -35,7 +59,20 @@ def dense2point(point: (float, float)):
 
 #<debug functions>
 
-def get_testdata(enc = point2dense):
+def get_testdata(enc = goldlabel_encodings.dense):
+    """
+    :param enc:
+    element of goldlabel_encodings
+    :return:
+    [(img, goldlabel)]
+    """
+    if enc == goldlabel_encodings.dense:
+        encfunc = point2dense
+    elif enc == goldlabel_encodings.onehot:
+        encfunc = point2spares
+    else:
+        print("Dataloader.get_testdata: invalid encoding: ", enc)
+        return None
     size = 32
     r = []
     for i in range(size**2):
@@ -44,7 +81,7 @@ def get_testdata(enc = point2dense):
 
         img = np.full((size, size), 255, dtype='uint8')
         cv2.circle(img, pos, 5, 0, thickness=5)
-        goldlabel = enc(pos)
+        goldlabel = encfunc(pos)
         r.append((img, goldlabel))
         #r[i] = (cv2.circle(r[i][0], pos, 2, 0), (pos[0]/size, pos[1]/size))  # dense encoding
     random.shuffle(r)
@@ -61,16 +98,15 @@ def getType(x):
             r += getType(i)+'; '
         return r[:-2] + '>'
     if name == 'ndarray':
-        return 'ndarray('+str(x.shape)+': '+getType(x[0])+')'
+        return 'ndarray('+str(x.shape)+': '+(getType(x[0]) if len(x) > 0 else "Nix")+')'
     if name == 'BatchDataset':
-        return name  # TODO
+        return str(name)+" : "+str(len(x))  # TODO
     return name
 
 
 def test_tfds():
-    dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/trainingDataset/paragraph_data"
     train_ds = tf.keras.utils.image_dataset_from_directory(
-        dir,
+        dataset_dir,
         validation_split=0.2,
         subset="training",
         seed=123,
@@ -86,6 +122,14 @@ def test_tfds():
     for elem in train_ds:
         print("elem = ", getType(elem))  # elem =  EagerTensor
         break
+    goldlabel = []
+    with open(dataset_dir+"/dir-gl.txt", 'r') as f:
+        for l in f.readlines():
+            point = l.split('-(')[1].replace(")\n", "").split(", ")  # TODO may only work for (float, float) tupels
+            point = (float(point[0]), float(point[1]))
+            goldlabel.append(point)
+    goldlabel = np.array(goldlabel)
+    return train_ds, goldlabel
 
 
 r = 1
@@ -99,6 +143,12 @@ def random_choice(list):
 
 
 def load_img(filename):
+    """
+    :param filename:
+    the path to an single image
+    :return:
+    an grayscale image.
+    """
     img = cv2.imread(filename)
     if img.shape[2] == 3:  # convert from rgb to grayscale
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -167,12 +217,6 @@ def linepoint2dense(points: [line_point], max_x: int, max_y: int, y_size: int) -
     dp = [(xs/max_x, ys/max_y, xe/max_x, ye/max_y, h/max_y) for ((xs, ys), (xe, ye), h) in points]
     dp = list(sum(dp, ()))  # flattens the list. https://stackoverflow.com/questions/10632839/transform-list-of-tuples-into-a-flat-list-or-a-matrix/35228431
     return np.array(dp+[0]*(5*y_size-len(dp)))
-
-    #if len(points) == 1:
-    #    ((xs, ys), (xe, ye), h) = points[0]
-    #    return [xs/max_x, ys/max_y, xe/max_x, ye/max_y, h/max_y]+[0]*(5*y_size-5)
-    #else:
-    #    s.o.
 
 
 def dense2linepoints(points: [float], max_x: int, max_y: int) -> [line_point]:
@@ -273,13 +317,13 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
     return (np.concatenate(img_list, axis=axis), goldlabel)
 
 
-def load_iam(dir, goldlabel_type):
+def load_iam(dir=iam_dir, goldlabel_type=goldlabel_types.linepositions):
     """
     :param dir:
     directory of the iam dataset
     only uses the word pictures of iam, lines, sentences and paragraphs are unused.
     :param goldlabel_type:
-    insert descritption
+    element of goldlabel_types that indicates what the goldlabel of a text should be
     :return:
     data: [(relative image path, goldlabel: [(start_of_line: (int, int), end_of_line: (int, int), height: int)])]
     """
@@ -297,7 +341,7 @@ def load_iam(dir, goldlabel_type):
     #     A               -> the transcription for this word
     bad_samples_reference = ['a01-117-05-02', 'r06-022-03-05']  # known broken images in IAM dataset, thx SimpleHTR
     word_img_gt = []
-    with open(dir+"/gt/words.txt") as f:
+    with open(dir+"iam/gt/words.txt") as f:
         for line in f:
             # ignore comment line
             if not line or line[0] == '#':
@@ -313,7 +357,7 @@ def load_iam(dir, goldlabel_type):
             # line_split[0] ="a01-000u-00-00"
             # img_filename = "img\a01\a01-000u\a01-000u-00-00"
             img_filename_split = line_split[0].split("-")
-            img_filename = "img/"+img_filename_split[0]+"/"+img_filename_split[0]+"-"+img_filename_split[1]+"/"+line_split[0]+".png"
+            img_filename = "iam/img/"+img_filename_split[0]+"/"+img_filename_split[0]+"-"+img_filename_split[1]+"/"+line_split[0]+".png"
             if goldlabel_type == goldlabel_types.text:
                 goldlabel = ' '.join(line_split[8:])
             elif goldlabel_type == goldlabel_types.linepositions:
@@ -325,7 +369,7 @@ def load_iam(dir, goldlabel_type):
             word_img_gt.append((img_filename, goldlabel))
     return word_img_gt
 
-def store(img_gl_data, dir):
+def store(img_gl_data, dir=dataset_dir):
     """
     :param img_gl_data:
     [(img: nparray, goldlabel) data that gets written to dir
@@ -343,25 +387,6 @@ def store(img_gl_data, dir):
             i += 1
     return None
 
-
-class goldlabel_types:
-    text = 0
-    linepositions = 1
-
-
-class goldlabel_encodings:
-    onehot = 0
-    dense = 1
-
-
-class img_types:
-    word = 0
-    line = 1
-    paragraph = 2
-
-
-class dataset_names:
-    iam = load_iam
 
 def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
     """
@@ -411,7 +436,10 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
     words_per_line = [2, 3, 4]
     lines_per_paragrph = [2, 3, 4, 5, 6]
 
-    data = dataset_loader(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
+    if dataset_loader == dataset_names.iam:
+        data = load_iam(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
+    else:
+        raise "invalid dataset_loader: "+str(dataset_loader)
     print("path_gl: ", getType(data))
     #print("data_imgpath_goldlabel = ", data[:5])
     # if goldlabel_type = text: type(data) = [(img: np.array(?, ?), text: string)]
@@ -459,4 +487,4 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
 
-#TODO abstand nach oben und links
+# TODO abgeschnittene Zeilen, leere Seiten einfügen
