@@ -103,7 +103,7 @@ def show_trainhistory(history, name="unnamed model"):
     # For raster graphics use the dpi argument. E.g. '[...].png", dpi=200)'
 
 
-def show_data(training_data):
+def show_text_data(training_data):
     for (img, txt) in training_data:
         cv2.imshow(txt, img)
     cv2.waitKey(0)
@@ -115,6 +115,7 @@ def show_points_data(training_data, decoding_func):
     if max([max(p) for (img, p) in training_data]) > 1.1 or min([min(p) for (img, p) in training_data]) < -0.1:
         print("main.show_points_data: point outside of bounds. points = ", [points for (img, points) in training_data])
     for (img, points) in training_data:
+        img = np.array(img, dtype="uint8")
         print("show_points_data.img: ", Dataloader.getType(img))
         print("show_points_data.pts: ", Dataloader.getType(points))
         points = decoding_func(points, max_x=w, max_y=h)
@@ -399,7 +400,9 @@ if __name__ == "__main__":
     #save_dict(history_tc_dense_mse, "tc_dense_mse")
     #exit(0)
     train_data, val, test = Dataloader.getTrainingData(Dataloader.goldlabel_encodings.dense)  # getTrainingData() = ((x_train, y_train), (x_val, y_val), (x_test, y_test))
+    #show_points_data([(train_data[0][i], train_data[1][i]) for i in range(len(train_data[0]))], Dataloader.dense2linepoints)
     x_shape = train_data[0][0].shape
+    print("x_shape = ", x_shape)
     model = Models.getModel("findfollowreadlite_mse", (x_shape[0], x_shape[1], 1), train_data[1][0].shape[0])
     train(model, "dense_mse", train_data[0], train_data[1], val)
 

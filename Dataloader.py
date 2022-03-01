@@ -57,7 +57,9 @@ def point2dense(point: (int, int)):
 def dense2point(point: (float, float)):
     return int(point[0]*32), int(point[1]*32)
 
-#<debug functions>
+
+# <debug functions>
+
 
 def get_testdata(enc = goldlabel_encodings.dense):
     """
@@ -152,7 +154,7 @@ def load_img(filename):
     img = cv2.imread(filename)
     if img.shape[2] == 3:  # convert from rgb to grayscale
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    return img
+    return img  # uint8
 
 
 def txt2sparse(txt, alphabet, y_size):
@@ -226,8 +228,8 @@ def dense2linepoints(points: [float], max_x: int, max_y: int) -> [line_point]:
 
 def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1):
 
-    h = max([d[0].shape[0] for d in data])
-    w = max([d[0].shape[1] for d in data])
+    h = max([img.shape[0] for (img, gl) in data])
+    w = max([img.shape[1] for (img, gl) in data])
     if size is not None:
         h = max(h, size[0])
         w = max(w, size[1])
@@ -395,7 +397,7 @@ def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
     :return:
     (x_train, y_train), (x_val, y_val), (x_test), (y_test), so that tf.model.fit(x_train, y_train, validation_data=(x_val, y_val)) works.
     """
-    data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=200, x_size=(1000, 2000))
+    data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=100, x_size=(512, 1024))
     train_val_split = int(0.8*len(data))  # 80% training, 10% validation, 10% test
     val_test_split = int(0.9*len(data))
     print("split: ", train_val_split, " : ", val_test_split, " : ", len(data))
@@ -433,8 +435,8 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
     if goldlabel_type not in [vars(goldlabel_types)[x] for x in vars(goldlabel_types).keys() if not x.startswith("__")]:
         print("Dataloader.getData(", dir, ", ", dataset_loader, ", ", img_type, ", ", maxcount, "): invalid input, goldlabel_type should be ", goldlabel_types)
         return None
-    words_per_line = [2, 3, 4]
-    lines_per_paragrph = [2, 3, 4, 5, 6]
+    words_per_line = [2, 3]
+    lines_per_paragrph = [2, 3, 4]
 
     if dataset_loader == dataset_names.iam:
         data = load_iam(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
@@ -457,7 +459,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
             return None
         data = data[:maxcount]
     print("path_gl_short: ", getType(data))
-    data = [(load_img(dir+"/"+path), goldlabel) for (path, goldlabel) in data]
+    data = [(load_img(dir+"/"+path), gl) for (path, gl) in data]
     print("imgword_gl: ", getType(data))
     if img_type == img_types.word:
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size)
@@ -465,7 +467,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         return data
 
     tmp = [data[i:i+random_choice(words_per_line)] for i in range(0, len(data), max(words_per_line))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
-    word_distance = [10, 100]
+    word_distance = [10, 20]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random_choice(word_distance) for unused in range(len(t))]) for t in tmp]
     #print("data_lines[0]: ", data[0])
     #print("data_imgline_goldlabel = ", data[:5])
@@ -476,7 +478,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         return data
 
     tmp = [data[i:i+random_choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
-    line_distance = [5, 50]
+    line_distance = [5, 10]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random_choice(line_distance) for unused in range(len(t))]) for t in tmp]
     print("imgpara_gl: ", getType(data))
     #print("data_parag[0]: ", data[0])
