@@ -158,6 +158,7 @@ def train(model, saveName, x_train, y_train, val):
     steps_without_improvment = 0
     valLoss = 1
     for i in range(16):
+        #get new batch of data for every run?
         #print("step start: lr = ", [lr, old_lr, older_lr])
         weights_pre = model.get_weights()
         weigths_post = [({}, [])]*len(lr_mult)
@@ -404,6 +405,6 @@ if __name__ == "__main__":
     x_shape = train_data[0][0].shape
     print("x_shape = ", x_shape)
     model = Models.getModel("findfollowreadlite_mse", (x_shape[0], x_shape[1], 1), train_data[1][0].shape[0])
-    train(model, "dense_mse", train_data[0], train_data[1], val)
+    train(model, "findfollowreadlite_mse", train_data[0], train_data[1], val)
 
 

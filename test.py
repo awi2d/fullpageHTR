@@ -52,13 +52,16 @@ def getDirSize(dir, size):
 
 
 def printDirSize():
-    size = getDirSize("C:/", {})
+    size = getDirSize("C:\\", {})
     print("size = ", size)
     with open("C:/Users/Idefix/Documents/dirsizes.txt", 'w') as f:
         keys = list(size.keys())
         try:
             keys.sort(key=lambda x: str(x).count('\\'))
             for k in keys:
-                print(str(k)+" - "+str(size[k]), file=f)
+                print(str(k)+" - ", file=f)
         except:
             print("cant print: unprintable")
+
+
+printDirSize()
