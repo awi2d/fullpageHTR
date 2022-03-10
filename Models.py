@@ -1,50 +1,91 @@
 import keras.losses
 import tensorflow as tf
 
+class Modelnames:
+    findfollowreadlite = 0
+    fullyconnected_fedforward = 1
+    vgg11 = 2
 
-def getModel(name, input_size, output_length, loss=keras.losses.MeanSquaredError()):
-    """
-    :param name:
-    Find-Follow-Read-lite:
-    simpleHTR:
-    :return:
-    A model with the defined architekture, that takes in an image and returns text
-    """
-    if name not in name_modelfunc.keys():
-        print("Models.getModel: name ", name, " is not in ", name_modelfunc.keys())
-        return None
-    return name_modelfunc[name](in_shape=input_size, out_length=output_length)
 
-def findfollowreadlite_dense(in_shape=(1000, 2000), out_length=5):
-    """
-    :param in_shape:
-    (int, int): shape of the input image. This model will only work on grayscale images that have exacly this size
-    :param out_length:
-    the number of output neuros. currently should be len(encoding_one_linepoint)*maximum_number_of_lines
-    :return:
-    a tenserflow modell
-    """
-    inputs = keras.Input(shape=(None, in_shape[0], in_shape[1],), name="digits")  # keine ahnung warum (1,2,) statt (1,2)
-    in_rescaled = tf.keras.layers.Rescaling(1./255)(inputs)
-    x = tf.keras.layers.Dense(64, activation="relu")(in_rescaled)
-    outputs = tf.keras.layers.Dense(out_length, activation="tanh")(x)
-
-    model = keras.Model(inputs=inputs, outputs=outputs)
-    opt = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5)
-    loss_func = keras.losses.MeanSquaredError()
-    model.compile(loss=loss_func, optimizer=opt)
+def fullyconnectedFedforward(in_shape=(1000, 2000), out_length=5, activation="linear"):
+    #trainable params: 24,978
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(units=out_length*4, activation='relu'))
+    model.add(tf.keras.layers.Dense(units=out_length*2, activation='relu'))
+    model.add(tf.keras.layers.Dense(units=out_length, activation=activation))  # mit tanh aks activation in der letzen schicht funktioniert das nicht
+    opt = tf.keras.optimizers.Adam(learning_rate=0.01, beta_1=0.5)  # learning rate should be unused
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
 
-# TODO learning rate anpassen
-# eingabe kleiner machen.
+def vgg11(in_shape, out_length, activation='linear'):
+    # structure nearly copyed from paper VERY DEEP CONVOLUTIONAL NETWORKS FOR LARGE-SCALE IMAGE RECOGNITION from Karen Simonyan & Andrew Zisserman
+    #Trainable params: 1,256,222
+    model = tf.keras.models.Sequential()
+    activation_in = 'relu'
+    model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # grayscale image has values in [0, 255] rescale to [-1, 1]
+    #model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in [0, 255] rescale to [0, 1]
+    dim = 16
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+
+    dim *= 2
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+
+    dim *= 2
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.LeakyReLU(alpha=0))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+
+    dim *= 2
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.LeakyReLU(alpha=0))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(dim, (3, 3), strides=(1, 1), padding="same", input_shape=in_shape, activation=activation_in))
+    model.add(tf.keras.layers.LeakyReLU(alpha=0))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dropout(0.4))
+    model.add(tf.keras.layers.Dense(units=4*out_length, activation=activation_in))
+    model.add(tf.keras.layers.Dropout(0.3))
+    model.add(tf.keras.layers.Dense(units=2*out_length, activation=activation_in))
+    model.add(tf.keras.layers.Dropout(0.3))
+    model.add(tf.keras.layers.Dense(units=2*out_length, activation=activation_in))
+    model.add(tf.keras.layers.Dense(units=out_length, activation=activation))  # should be softmax if goldlabel_encoding is onehot
+
+    # compile model
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.5)
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)  # metrics=['mean_squared_error']
+    return model
+
+
+# TODO in literatur nach anderen (positionserkennungs) netzen suchen
+# clustering?
 # filter anzahl/größer machen
-def findfollowreadlite(in_shape=(32, 128, 1), out_length=26, lr=0.0001, lossfunc=keras.losses.MeanSquaredError()):
+def conv(in_shape=(32, 32, 1), out_length=6, activation='linear'):
+    # trainable parameters 23,316
     model = tf.keras.models.Sequential()
 
     # Layer 1 Conv2D
     # model.add(Dropout(0.2, input_shape=input_shape))
-    model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
+    model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # rescale img to [0, 1]
+    #model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # rescale img to [-1, 1]
     model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", input_shape=in_shape, activation='tanh'))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
     model.add(tf.keras.layers.Dropout(0.4))
@@ -72,23 +113,13 @@ def findfollowreadlite(in_shape=(32, 128, 1), out_length=26, lr=0.0001, lossfunc
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Dense(units=120, activation='tanh'))
     model.add(tf.keras.layers.Dense(units=84, activation='tanh'))
-    model.add(tf.keras.layers.Dense(units=out_length, activation='sigmoid'))
+    model.add(tf.keras.layers.Dense(units=out_length, activation=activation))
 
     # compile model
-    opt = tf.keras.optimizers.Adam(learning_rate=lr, beta_1=0.5)
-    model.compile(loss=lossfunc, optimizer=opt)  # metrics=['mean_squared_error']
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.5)
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
-
-def findfollowreadlite_cce(in_shape=(1000, 2000), out_length=5):
-    return findfollowreadlite(in_shape=in_shape, out_length=out_length, lossfunc=keras.losses.CategoricalCrossentropy())
-
-
-def findfollowreadlite_mse(in_shape=(1000, 2000), out_length=5):
-    return findfollowreadlite(in_shape=in_shape, out_length=out_length, lossfunc=keras.losses.MeanSquaredError())
-
-
-name_modelfunc = {"findfollowreadlite_cce": findfollowreadlite_cce, "findfollowreadlite_mse": findfollowreadlite_mse, "findfollowreadlite_dense": findfollowreadlite_dense}
 
 #TODO learn "Functional API" https://www.tensorflow.org/guide/keras/train_and_evaluate
 #inputs = keras.Input(shape=(784,), name="digits")

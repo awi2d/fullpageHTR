@@ -7,10 +7,12 @@ import main
 
 def test_linepointenc():
     points = [((0, 1), (2, 3), 4), ((5, 6), (7, 8), 9)]
+    tp = [(0, 1), (2, 3), (4, 5)]
     x = 8
     y = 10
     assert Dataloader.dense2linepoints(Dataloader.linepoint2dense(points, x, y, len(points)), x, y) == points
     assert Dataloader.sparse2linepoints(Dataloader.linepoint2sparse(points, x, y, len(points)), x, y) == points
+    assert Dataloader.dense2points(Dataloader.points2dense(tp, 32), 32) == tp
 
 def op(n, args):
     #print("op(", n, ", ", args)
@@ -29,6 +31,7 @@ def op(n, args):
 
 #for i in range(10):
 #    print("op(", i, ", [2, 2]) = ", op(i, [2, 2]))
+
 
 def getDirSize(dir, size):
     if os.path.isfile(dir):
@@ -64,4 +67,4 @@ def printDirSize():
             print("cant print: unprintable")
 
 
-printDirSize()
+test_linepointenc()

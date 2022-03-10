@@ -19,6 +19,7 @@ models_dir = data_dir+"models/"  # directoy for storing trained models
 class goldlabel_types:
     text = 0
     linepositions = 1
+    number_of_lines = 2
 
 
 class goldlabel_encodings:
@@ -36,6 +37,18 @@ class dataset_names:
     iam = 0
 
 
+def num2sparse(num, max):
+    r = [0]*max
+    r[num] = 1
+    return r
+def sparse2num(sparse):
+    r = 0
+    for i in range(len(sparse)):
+        if sparse[i]>sparse[r]:
+            r = i
+    return r
+
+
 def point2spares(point: (int, int)):
     r = [0]*(32*2)
     r[point[0]] = 1
@@ -51,15 +64,72 @@ def sparse2point(point: [float]):
             y = i
     return (x, y)
 
-def point2dense(point: (int, int)):
-    return (point[0]/32, point[1]/32)
+def points2dense(points: [(int, int)], max_x=32, max_y=32) -> [float]:
+    return [points[int(i/2)][i%2]/max_x for i in range(len(points)*2)]
 
-def dense2point(point: (float, float)):
-    return int(point[0]*32), int(point[1]*32)
+def dense2points(points: [float], max_x=32, max_y=32) -> [(int, int)]:
+    return [(int(points[2*i]*max_x), int(points[2*i+1]*max_x)) for i in range(int(len(points)/2))]
 
 
 # <debug functions>
 
+
+def downscale(img, goldlabel: [line_point], x: int, y: int):
+    """
+    reduces the resolution of the image
+    :param img:
+    an opencv-img, that means numpy-array
+    :param goldlabel:
+    the goldlabel of image, unencoded
+    :param x:
+    the factor by witch the width of the image is scaled
+    :param y:
+    the factor by witch the hight of the image is scaled
+    :return:
+    an image of size (input_size[0]/x, input_size[1]/y)
+    """
+    img = cv2.resize(img, dsize=None, fx=1/x, fy=1/y)
+    goldlabel = [((int(x1/x), int(y1/y)), (int(x2/x), int(y2/y)), int(h/y)) for ((x1, y1), (x2, y2), h) in goldlabel]
+    return np.array(img, dtype="uint8"), goldlabel
+
+
+def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), sampesize: (int, int)):
+    """
+    samples an area out of the image
+    :param img:
+    an oopencv-img, that means numpy-array
+    :param upperleftcorner:
+    the upper left corner of the return image in the input image
+    :param sampesize:
+    the size of the return image
+    :return:
+    an image that shows an area out of th input image
+    """
+    ulx, uly = upperleftcorner
+    drx = ulx+sampesize[0]
+    dry = uly+sampesize[1]
+    goldlabel = [((x1-ulx, y1-uly), (x2-ulx, y2-uly), h) for ((x1, y1), (x2, y2), h) in goldlabel if ulx < min(x1, x2) and uly < min(y1, y2) and max(x1, x2) < drx and max(y1, y2) < dry]
+    if len(goldlabel) == 0:
+        goldlabel = [((0, 0), (0, 0), 0)]
+    return np.array(img[uly:dry, ulx:drx], dtype="uint8"), goldlabel
+
+def sample_point(img, goldlabel: [line_point], upperleftcorner: (int, int), sampesize: (int, int)):
+    """
+    samples an area out of the image
+    :param img:
+    an oopencv-img, that means numpy-array
+    :param upperleftcorner:
+    the upper left corner of the return image in the input image
+    :param sampesize:
+    the size of the return image
+    :return:
+    an image that shows an area out of th input image
+    """
+    ulx, uly = upperleftcorner
+    drx = ulx+sampesize[0]
+    dry = uly+sampesize[1]
+    goldlabel = [(x-ulx, y-uly) for (x, y) in goldlabel if ulx < x and uly < y and x < drx and y < dry]
+    return np.array(img[uly:dry, ulx:drx], dtype="uint8"), goldlabel
 
 def get_testdata(enc = goldlabel_encodings.dense):
     """
@@ -68,8 +138,9 @@ def get_testdata(enc = goldlabel_encodings.dense):
     :return:
     [(img, goldlabel)]
     """
+    #TODO testdaten die näher an linien sind generieren.
     if enc == goldlabel_encodings.dense:
-        encfunc = point2dense
+        encfunc = points2dense
     elif enc == goldlabel_encodings.onehot:
         encfunc = point2spares
     else:
@@ -226,13 +297,39 @@ def dense2linepoints(points: [float], max_x: int, max_y: int) -> [line_point]:
     return [((int(points[i]*max_x), int(points[i+1]*max_y)), (int(points[i+2]*max_x), int(points[i+3]*max_y)), int(points[i+4]*max_y)) for i in range(0, len(points), 5)]
 
 
-def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1):
+def fitsize(img, gl, w, h):
+    if img.shape[0] >= h:
+        img, gl = sample_linepoint(img, gl, (0, 0), (img.shape[0], h-1))
+    if img.shape[1] >= w:
+        img, gl = sample_linepoint(img, gl, (0, 0), (w-1, img.shape[1]))
+    #print("fitsize: (h, w) = ", (h, w), "shape = ", img.shape)
+    return np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), gl
 
-    h = max([img.shape[0] for (img, gl) in data])
-    w = max([img.shape[1] for (img, gl) in data])
-    if size is not None:
-        h = max(h, size[0])
-        w = max(w, size[1])
+
+def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1):
+    """
+    :param data:
+    data of type [(image, goldlabel)]
+    :param goldlabel_type:
+    type of goldlabel in Dataset.gl_type
+    currently text or lineposition
+    :param goldlabel_encoding:
+    encoding of goldlabel in Dataset.gl_encoding
+    :param size:
+    (width: int, height: int) or the other way round, size all images in data will have.
+    that means they either get padded are cliped.
+    :param y_size:
+    size all goldlabel_encodings in data will have
+    :return:
+    [(image, goldlabel)] like input, but the goldlabel is encoded and image and goldlabel are padded to size
+    """
+
+    if size is None:
+        h = int(max([img.shape[0] for (img, gl) in data])/2)  # konstants should always be the same as in rescaling. This will obviusly break with goldlabel_type == text
+        w = int(max([img.shape[1] for (img, gl) in data])/4)
+    else:
+        h = size[0]
+        w = size[1]
     print("Dataloader.encode_and_pad: w, h = ", h, ", ", w)
     if goldlabel_type == goldlabel_types.text:
         # get alphabet used
@@ -249,10 +346,26 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
         else:
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
     elif goldlabel_type == goldlabel_types.linepositions:
+        data = [downscale(img, points, 4, 2) for (img, points) in data]  # TODO should be optional
+        #h = int(h/2)
+        #w = int(w/4)
+        data = [fitsize(img, gl, w, h) for (img, gl) in data]
         if goldlabel_encoding == goldlabel_encodings.dense:
             return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2dense(point, max_x=w, max_y=h, y_size=y_size)) for (img, point) in data]
         elif goldlabel_encoding == goldlabel_encodings.onehot:
             return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2sparse(point, w, h, y_size)) for (img, point) in data]
+        else:
+            raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
+    elif goldlabel_type == goldlabel_types.number_of_lines:
+        data = [downscale(img, points, 4, 2) for (img, points) in data]  # TODO should be optional
+        #h = int(h/2)
+        #w = int(w/4)
+        data = [fitsize(img, gl, w, h) for (img, gl) in data]
+        maxlinecount = max([gl for (img, gl) in data])
+        if goldlabel_encoding == goldlabel_encodings.dense:
+            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), lc/maxlinecount) for (img, lc) in data]
+        elif goldlabel_encoding == goldlabel_encodings.onehot:
+            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), num2sparse(lc, maxlinecount)) for (img, lc) in data]
         else:
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
     else:
@@ -366,6 +479,8 @@ def load_iam(dir=iam_dir, goldlabel_type=goldlabel_types.linepositions):
                 width = int(line_split[5])
                 hight = int(line_split[6])
                 goldlabel = [((0, int(0.5*hight)), (width, int(0.5*hight)), hight)]
+            elif goldlabel_type == goldlabel_types.number_of_lines:
+                goldlabel = 1
             else:
                 goldlabel = "TODO: invalid goldlabel_type in Dataloader.load_iam: "+str(goldlabel_type)
             word_img_gt.append((img_filename, goldlabel))
@@ -388,6 +503,7 @@ def store(img_gl_data, dir=dataset_dir):
             cv2.imwrite(tpath, img)
             i += 1
     return None
+
 
 
 def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
@@ -414,7 +530,7 @@ def getTrainingData(goldlabel_encoding=goldlabel_encodings.onehot):
     return (x_train, y_train), (x_val, y_val), (x_test, y_test)
 
 
-def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.text, goldlabel_encoding=goldlabel_encodings.onehot, x_size = (100, 100), maxcount=-1):
+def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=goldlabel_types.text, goldlabel_encoding=goldlabel_encodings.onehot, x_size = (100, 100), maxcount=-1, offset=0):
     """
     :param dataset_name:
         name of the dataset to use, currently only \"iam\" supported
@@ -447,7 +563,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
     # if goldlabel_type = text: type(data) = [(img: np.array(?, ?), text: string)]
     # if goldlabel_type = linepositions: type(data) = [(img: np.array(?, ?), [point: (int, int)])]
 
-    if 0 < maxcount < len(data):
+    if 0 < maxcount < len(data) and offset+maxcount < len(data):
         if img_type == img_types.word:
             maxcount = maxcount
         elif img_type == img_types.line:
@@ -457,7 +573,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         else:
             print("unexpected img_type: ", img_type)
             return None
-        data = data[:maxcount]
+        data = data[offset:offset+maxcount]
     print("path_gl_short: ", getType(data))
     data = [(load_img(dir+"/"+path), gl) for (path, gl) in data]
     print("imgword_gl: ", getType(data))
@@ -488,5 +604,131 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         print("imgparaenc_gl: ", getType(data))
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
+
+class Dataset_test:
+    def __init__(self, difficulty=0):
+        self.diff = difficulty
+
+    def get_batch(self, n):
+        """
+        :param n:
+        the number of elements in the batch returned
+        :return:
+        a data batch ([img], [gl]), that can directly be used for tf.model.fit(x=[img], y=[gl], ...)
+        in this dataset, the images have size 32x32 and show one or multiply circles.
+        the goldlabel for each image is the position of the circles.
+        """
+        size = 32
+        r = []
+        poses = [(int(i/size), i%size) for i in range(size**2)]
+        random.shuffle(poses)
+        for i in range(n):
+            img = np.full((size, size), 255, dtype='uint8')
+            if self.diff == 0:
+                # ein kreis
+                pos = [poses[i]]
+                for p in pos:
+                    cv2.circle(img, p, 5, 0, thickness=5)
+            elif self.diff == 1:
+                # zwei kreis, einer links, anderer rechts
+                pos = [random.choice(poses) for unused in range(2)]
+                hs = int(size/2)
+                pos = [(pos[0][0]%hs, pos[0][1]), (pos[1][0]%hs+hs, pos[1][0])]
+                for p in pos:
+                    cv2.circle(img, p, 5, 0, thickness=5)
+            elif self.diff == 2:
+                # zwei kreis
+                pos = [random.choice(poses) for unused in range(2)]
+                for p in pos:
+                    cv2.circle(img, p, 5, 0, thickness=5)
+            elif self.diff == 3:
+                # random(3) kreis
+                tmp = random.choice(list(range(4)))
+                pos = [random.choice(poses) for unused in range(tmp)]
+                for p in pos:
+                    cv2.circle(img, p, 5, 0, thickness=5)
+                pos += [(0, 0)]*(3-tmp)
+            else:
+                print("unsuported difficulty: ", self.diff)
+                return None
+            pos.sort(key=lambda x: x[0])
+            r.append((img, points2dense(pos)))
+        return np.array([d[0] for d in r]), np.array([d[1] for d in r])  # img, goldlabel
+
+    def show(self, batch):
+        """
+        :param batch:
+        :type ([img], [goldlabels])
+        with img is type as in opencCV
+        and goldlabel is [float]
+        e.g. the return value of self.get_batch:
+        x, y = dataset.get_batch(20)
+        dataset.show((x, y))
+        :return:
+        None, but shows (cv2.imshow) an represantation of the data
+        """
+        assert len(batch[0]) == len(batch[1])
+        batch = [(np.array(batch[0][i], dtype="uint8"), dense2points(batch[1][i])) for i in range(len(batch[0]))]
+        for (img, gl) in batch:
+            print("test_dataset.show: img: "+str(img)+" -> "+str(gl))
+            for point in gl:
+                cv2.circle(img, point, 5, 125, 3)
+            cv2.imshow(str(gl), img)
+            cv2.waitKey(0)
+
+class Dataset:
+    data_dir = None
+    gl_type = 0
+    gl_encoding = 0
+    pos = 0
+    dataset_size = -1
+    imgsize = (256, 256)
+
+    def __init__(self, datadir, gl_type, gl_encoding):
+        self.data_dir = datadir
+        self.gl_type = gl_type
+        self.gl_encoding = gl_encoding
+        self.pos = 0
+        self.dataset_size = len(load_iam(datadir, gl_type))
+
+    def get_batch(self, size):
+        #data = get_testdata()
+        #return np.array([d[0] for d in data]), np.array([d[1] for d in data])
+        #selekt witch part of dset to use
+        assert size < self.dataset_size
+        if self.pos+size >= self.dataset_size:
+            self.pos = self.pos % (self.dataset_size-size)
+        data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, x_size=self.imgsize)
+        self.pos = self.pos+size
+        x_train = np.array([d[0] for d in data], dtype=float)
+        y_train = np.array([d[1] for d in data], dtype=float)
+        return x_train, y_train
+
+    def show(self, batch):
+        h, w = batch[0][0].shape
+        print("main.show_points_data: w, h = ", h, ", ", w)
+        if max([max(p) for (img, p) in batch]) > 1.1 or min([min(p) for (img, p) in batch]) < -0.1:
+            print("main.show_points_data: point outside of bounds. points = ", [points for (img, points) in batch])
+        for (img, points) in batch:
+            img = np.array(img, dtype="uint8")
+            print("show_points_data.img: ", batch.getType(img))
+            print("show_points_data.pts: ", batch.getType(points))
+            print("show_points_data.pts: ", points)
+            if self.gl_encoding == goldlabel_encodings.dense:
+                points = dense2linepoints(points, max_x=w, max_y=h)
+            elif self.gl_encoding == goldlabel_encodings.onehot:
+                points = sparse2linepoints(points, max_x=w, max_y=h)
+            else:
+                print("TODO unsupported gl_encoding in dataset.show: ", self.gl_encoding)
+                points = [((0, 0), (0, 0), 0)]
+            for point in points:
+                #print("point = ", point)
+                point = ((max(1, int(point[0][0])), max(1, int(point[0][1]))), (max(1, int(point[1][0])), max(1, int(point[1][1]))), max(1, int(point[2])))
+                cv2.circle(img, point[0], int(point[2]/2), 125, 2)
+                cv2.rectangle(img, (point[0][0]-5, point[0][1]-5), (point[0][0]+5, point[0][1]+5), 125, 2)
+                cv2.circle(img, point[1], int(point[2]/2), 125, 2)
+                cv2.line(img, point[0], point[1], 125, thickness=1)
+            cv2.imshow(str(points), img)
+        cv2.waitKey(0)
 
 # TODO abgeschnittene Zeilen, leere Seiten einfügen

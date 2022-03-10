@@ -36,4 +36,3 @@ def decode_fn(record_bytes):
         {"x": tf.io.FixedLenFeature([], dtype=tf.float32),
          "y": tf.io.FixedLenFeature([], dtype=tf.float32)}
     )
-
