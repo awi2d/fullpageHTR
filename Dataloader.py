@@ -9,8 +9,8 @@ import random
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-#data_dir = "../SimpleHTR/data/trainingDataset/"
-data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+data_dir = "../SimpleHTR/data/trainingDataset/"
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
 iam_dir = data_dir+"iam/"  # the unchanged iam dataset
 dataset_dir = data_dir+"generated/"  # directoy for storing generated data
 models_dir = data_dir+"models/"  # directoy for storing trained models
@@ -108,11 +108,13 @@ def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), 
     glr = []
     for ((x1, y1), (x2, y2), h) in goldlabel:
         # if completly out of range: remove
-        if uly+1 > min(y1, y2) and max(y1, y2)+1 > dry:
+        if uly > min(y1, y2)+1 and max(y1, y2) > dry+1:
             continue
         # if cutted: move gl to be in bounds
         x1 = min(max(x1, ulx), drx)
         x2 = min(max(x2, ulx), drx)
+        y1 = min(max(y1, uly), dry)
+        y2 = min(max(y2, uly), dry)
         h = min(h, abs(y1-uly), abs(y1-dry), abs(y2-uly), abs(y2-dry))
         glr.append(((x1-ulx, y1-uly), (x2-ulx, y2-uly), h))
     if len(glr) == 0:
