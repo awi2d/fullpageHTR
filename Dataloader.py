@@ -9,8 +9,8 @@ import random
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-data_dir = "../SimpleHTR/data/trainingDataset/"
-#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+#data_dir = "../SimpleHTR/data/trainingDataset/"
+data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
 iam_dir = data_dir+"iam/"  # the unchanged iam dataset
 dataset_dir = data_dir+"generated/"  # directoy for storing generated data
 models_dir = data_dir+"models/"  # directoy for storing trained models
@@ -531,7 +531,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         print("Dataloader.getData(", dir, ", ", dataset_loader, ", ", img_type, ", ", maxcount, "): invalid input, goldlabel_type should be ", goldlabel_types)
         return None
     words_per_line = [2, 3]
-    lines_per_paragrph = [2, 3, 4]
+    lines_per_paragrph = [1, 2, 3]
 
     if dataset_loader == dataset_names.iam:
         data = load_iam(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]

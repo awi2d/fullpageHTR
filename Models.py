@@ -3,11 +3,11 @@ import tensorflow as tf
 
 
 def fullyconnectedFedforward(in_shape=(1000, 2000), out_length=5, activation="linear"):
-    #trainable params: 24,978
+    #trainable params: (out_length = ?) 24,978, (out_length = 4*5) 5,247,020
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(units=out_length*4, activation='relu'))
+    model.add(tf.keras.layers.Dense(units=out_length*3, activation='relu'))
     model.add(tf.keras.layers.Dense(units=out_length*2, activation='relu'))
     model.add(tf.keras.layers.Dense(units=out_length, activation=activation))  # mit tanh aks activation in der letzen schicht funktioniert das nicht
     opt = tf.keras.optimizers.Adam(learning_rate=0.01, beta_1=0.5)  # learning rate should be unused
@@ -19,7 +19,7 @@ def fullyconnectedFedforward2(in_shape=(32, 32, 1), out_length=6, activation='li
     inputs = keras.Input(shape=in_shape, name="digits")
     rescaledIn = tf.keras.layers.Rescaling(1./255)(inputs)
     flat = tf.keras.layers.Flatten()(rescaledIn)
-    x1 = tf.keras.layers.Dense(units=out_length*4, activation='relu')(flat)
+    x1 = tf.keras.layers.Dense(units=out_length*3, activation='relu')(flat)
     x2 = tf.keras.layers.Dense(units=out_length*2, activation='relu')(x1)
     x3 = tf.keras.layers.Dense(units=out_length, activation=activation)(x2)
     outputs = tf.keras.layers.Dense(out_length, activation=activation, name="predictions")(x3)
@@ -42,7 +42,7 @@ def cvff(in_shape=(1000, 2000), out_length=5, activation="linear"):
     model.add(tf.keras.layers.Conv2D(3, (3, 3), strides=(1, 1), padding="same", activation=activation_in))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(units=out_length*4, activation='relu'))
+    model.add(tf.keras.layers.Dense(units=out_length*3, activation='relu'))
     model.add(tf.keras.layers.Dense(units=out_length*2, activation='relu'))
     model.add(tf.keras.layers.Dense(units=out_length, activation=activation))  # mit tanh aks activation in der letzen schicht funktioniert das nicht
     opt = tf.keras.optimizers.Adam(learning_rate=0.01, beta_1=0.5)  # learning rate should be unused

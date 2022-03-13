@@ -96,7 +96,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 1024
+    batch_size = 10
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -118,8 +118,8 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
     valLoss = 1
     x_train, y_train = dataset.get_batch(batch_size)
     epochcount = 0
-    long_epochs = 64
-    short_epochs = 2
+    long_epochs = 16
+    short_epochs = 1
     best_model = (valLoss, model.get_weights())
     while True:
 
@@ -127,12 +127,11 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
             # train for long
             print(str(lr) + "L", end=' ')
             backend.set_value(model.optimizer.learning_rate, lr)
-            history_next = model.fit(x_train, y_train, epochs=long_epochs, callbacks=[callback], validation_data=val,
-                                     verbose=0).history  # steps_per_epoch=len(x_train) oder batch_size=batch_size?
-            old_lr = -1
-            older_lr = -2
+            history_next = model.fit(x_train, y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
             del x_train
             del y_train
+            old_lr = -1
+            older_lr = -2
             x_train, y_train = dataset.get_batch(batch_size)
         else:
             # train with different learning rates.
@@ -142,7 +141,7 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val, verbose=0)  # steps_per_epoch=len(x_train),
+                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val, verbose=0)
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory.history, model.get_weights())
                 model.set_weights(weights_pre)
@@ -154,6 +153,7 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
                     best = i
             model.set_weights(weigths_post[best][1])
             history_next = weigths_post[best][0]
+            del weigths_post
             older_lr = old_lr
             old_lr = lr
             lr = lr * lr_mult[best]
@@ -276,6 +276,7 @@ if __name__ == "__main__":
                 print("name: ", name)
 
                 model = modelf(in_shape=(x_shape[0], x_shape[1], 1), out_length=y[0].shape[0], activation=act)
+                model.summary()
                 train(model, name, dataset, val=(x, y), start_lr=2**(-start_lr))
                 #infer(name, dataset)
 
