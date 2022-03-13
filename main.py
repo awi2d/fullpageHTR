@@ -95,7 +95,8 @@ def show_trainhistory(history, name="unnamed model"):
 
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
-    batch_size = 10000  # TODO find better konstant
+    # TODO find better batch_size
+    batch_size = 1024
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
