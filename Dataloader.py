@@ -9,8 +9,8 @@ import random
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-data_dir = "../SimpleHTR/data/trainingDataset/"
-#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+#data_dir = "../SimpleHTR/data/trainingDataset/"
+data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
 iam_dir = data_dir+"iam/"  # the unchanged iam dataset
 dataset_dir = data_dir+"generated/"  # directoy for storing generated data
 models_dir = data_dir+"models/"  # directoy for storing trained models
@@ -71,9 +71,6 @@ def dense2points(points: [float], max_x=32, max_y=32) -> [(int, int)]:
     return [(int(points[2*i]*max_x), int(points[2*i+1]*max_x)) for i in range(int(len(points)/2))]
 
 
-# <debug functions>
-
-
 def downscale(img, goldlabel: [line_point], x: int, y: int):
     """
     reduces the resolution of the image
@@ -105,16 +102,23 @@ def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), 
     :return:
     an image that shows an area out of th input image
     """
-    ulx, uly = upperleftcorner
-    drx = ulx+sampesize[0]
+    ulx, uly = upperleftcorner  # up-left corner
+    drx = ulx+sampesize[0]  # down-right corner
     dry = uly+sampesize[1]
-    print("(ulx, uly, drx, dry) = ", (ulx, uly, drx, dry))
-    print("goldlabel = ", goldlabel)
-    goldlabel = [((x1-ulx, y1-uly), (x2-ulx, y2-uly), h) for ((x1, y1), (x2, y2), h) in goldlabel if (ulx <= min(x1, x2)+1 and uly <= min(y1, y2)+1 and max(x1, x2) <= drx+1 and max(y1, y2)+1 <= dry)]
-    if len(goldlabel) == 0:
-        goldlabel = [((0, 0), (0, 0), 0)]
-    print("goldlabel = ", goldlabel)
-    return np.array(img[uly:dry, ulx:drx], dtype="uint8"), goldlabel
+    glr = []
+    for ((x1, y1), (x2, y2), h) in goldlabel:
+        # if completly out of range: remove
+        if uly+1 > min(y1, y2) and max(y1, y2)+1 > dry:
+            continue
+        # if cutted: move gl to be in bounds
+        x1 = min(max(x1, ulx), drx)
+        x2 = min(max(x2, ulx), drx)
+        h = min(h, abs(y1-uly), abs(y1-dry), abs(y2-uly), abs(y2-dry))
+        glr.append(((x1-ulx, y1-uly), (x2-ulx, y2-uly), h))
+    if len(glr) == 0:
+        glr = [((0, 0), (0, 0), 0)]
+    return np.array(img[uly:dry, ulx:drx], dtype="uint8"), glr
+
 
 def sample_point(img, goldlabel: [line_point], upperleftcorner: (int, int), sampesize: (int, int)):
     """
@@ -134,40 +138,14 @@ def sample_point(img, goldlabel: [line_point], upperleftcorner: (int, int), samp
     goldlabel = [(x-ulx, y-uly) for (x, y) in goldlabel if ulx < x and uly < y and x < drx and y < dry]
     return np.array(img[uly:dry, ulx:drx], dtype="uint8"), goldlabel
 
-def get_testdata(enc = goldlabel_encodings.dense):
-    """
-    :param enc:
-    element of goldlabel_encodings
-    :return:
-    [(img, goldlabel)]
-    """
-    #TODO testdaten die näher an linien sind generieren.
-    if enc == goldlabel_encodings.dense:
-        encfunc = points2dense
-    elif enc == goldlabel_encodings.onehot:
-        encfunc = point2spares
-    else:
-        print("Dataloader.get_testdata: invalid encoding: ", enc)
-        return None
-    size = 32
-    r = []
-    for i in range(size**2):
-        pos = (int(i/size), i%size)
-        #cv2.circle(img, center, radius, color)
 
-        img = np.full((size, size), 255, dtype='uint8')
-        cv2.circle(img, pos, 5, 0, thickness=5)
-        goldlabel = encfunc(pos)
-        r.append((img, goldlabel))
-        #r[i] = (cv2.circle(r[i][0], pos, 2, 0), (pos[0]/size, pos[1]/size))  # dense encoding
-    random.shuffle(r)
-    return r
+# <debug functions>
 
 
 def getType(x):
     name = type(x).__name__
     if name == 'list':
-        return '['+str(len(x))+":"+getType(x[0])+']'  # TODO assumes all element of the list have the same type
+        return '['+str(len(x))+":"+getType(x[0])+']'  # assumes all element of the list have the same type
     if name == 'tuple':
         r = '<'+str(len(x))+":"
         for i in x:
@@ -176,7 +154,7 @@ def getType(x):
     if name == 'ndarray':
         return 'ndarray('+str(x.shape)+': '+(getType(x[0]) if len(x) > 0 else "Nix")+')'
     if name == 'BatchDataset':
-        return str(name)+" : "+str(len(x))  # TODO
+        return str(name)+" : "+str(len(x))
     return name
 
 
@@ -207,13 +185,6 @@ def test_tfds():
     goldlabel = np.array(goldlabel)
     return train_ds, goldlabel
 
-
-r = 1
-def random_choice(list):
-    # looks kinda random, all results are equaly likely, but is always the same and didnt need any additional packages.
-    global r
-    r = (r+97)%251  # may not work correktly if len(list)%97=0 for multiple cals
-    return list[r%len(list)]
 
 #</debug functions>
 
@@ -415,16 +386,20 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
             print("Dataloader.concat_data: goldlabel_type ", goldlabel_type, " is not valid")
     elif axis == 1:
         h = max([img.shape[0] for img in img_list])
-        img_list = [np.pad(img_list[i], ((0, h-img_list[i].shape[0]), (pad[i], 0)), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
+        img_list = [np.pad(img_list[i], ((int(np.floor_divide((h-img_list[i].shape[0]),2)), int(np.ceil((h-img_list[i].shape[0])/2))), (pad[i], 0)), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
         if goldlabel_type == goldlabel_types.text:
             goldlabel = ' '.join(goldlabel_list)
         elif goldlabel_type == goldlabel_types.linepositions:
             # line start at start point of first word, ends at endpoint of last word + sum(width every other word), and has the hight of maxium height of each word.
-            startpoint = goldlabel_list[0][0][0]  # (float, float)  # startpoint of line is startpoint of first word.
-            endpoint = goldlabel_list[-1][0][1]  # (float, float)  # endpoint of line is endpoint of last word
+            # goldlabel = [((x1, y1), (x2, y2), h)]
+            # goldlabel_list = [goldlabel]
+            #print("goldlabel_list = ", getType(goldlabel_list))  # goldlabel_list =  [3:[1:<3:<2:int; int>; <2:int; int>; int>]]
+            hight = max([gl[0][2] for gl in goldlabel_list])  # float
+            startpoint = (goldlabel_list[0][0][0][0], goldlabel_list[0][0][0][1]+np.floor_divide(hight-goldlabel_list[0][0][2], 2))
+            endpoint = (goldlabel_list[-1][0][1][0], goldlabel_list[-1][0][1][1]+np.floor_divide(hight-goldlabel_list[-1][0][2], 2))
+            #endpoint = goldlabel_list[-1][0][1]
             widths = [abs(point[0][1][0]-point[0][0][0]) for point in goldlabel_list]
             endpoint = (startpoint[0]+sum(widths)+sum(pad), endpoint[1])
-            hight = max([gl[0][2] for gl in goldlabel_list])  # float
             goldlabel = [(startpoint, endpoint, hight)]
         else:
             print("Dataloader.concat_data: goldlabel_type ", goldlabel_type, " is not valid")
@@ -584,9 +559,9 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         print("imgwordenc_gl: ", getType(data))
         return data
 
-    tmp = [data[i:i+random_choice(words_per_line)] for i in range(0, len(data), max(words_per_line))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
+    tmp = [data[i:i+random.choice(words_per_line)] for i in range(0, len(data), max(words_per_line))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
     word_distance = [10, 20]
-    data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random_choice(word_distance) for unused in range(len(t))]) for t in tmp]
+    data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random.choice(word_distance) for unused in range(len(t))]) for t in tmp]
     #print("data_lines[0]: ", data[0])
     #print("data_imgline_goldlabel = ", data[:5])
     #print("imgline_gl: ", getType(data))
@@ -595,9 +570,9 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         print("imglineenc_gl: ", getType(data))
         return data
 
-    tmp = [data[i:i+random_choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
+    tmp = [data[i:i+random.choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
     line_distance = [5, 10]
-    data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random_choice(line_distance) for unused in range(len(t))]) for t in tmp]
+    data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random.choice(line_distance) for unused in range(len(t))]) for t in tmp]
     #print("imgpara_gl: ", getType(data))
     #print("data_parag[0]: ", data[0])
     #print("data_imgpara_goldlabel = ", data[:5])
@@ -695,7 +670,7 @@ class Dataset:
     pos = 0
     dataset_size = -1
     imgsize = (256, 256)
-    add_empty_images = False
+    add_empty_images = True
 
     def __init__(self, datadir, gl_type, gl_encoding):
         self.data_dir = datadir
