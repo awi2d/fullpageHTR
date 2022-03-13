@@ -4,6 +4,7 @@ import tensorflow as tf
 
 def fullyconnectedFedforward(in_shape=(1000, 2000), out_length=5, activation="linear"):
     #trainable params: (out_length = ?) 24,978, (out_length = 4*5) 5,247,020
+    # i.g. in_shape[0]*in_shape[1]*out_length*2+out_length*out_length*8
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
     model.add(tf.keras.layers.Flatten())
