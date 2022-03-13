@@ -96,7 +96,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 10
+    batch_size = 1024
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -118,8 +118,8 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
     valLoss = 1
     x_train, y_train = dataset.get_batch(batch_size)
     epochcount = 0
-    long_epochs = 16
-    short_epochs = 1
+    long_epochs = 64
+    short_epochs = 2
     best_model = (valLoss, model.get_weights())
     while True:
 
@@ -276,7 +276,7 @@ if __name__ == "__main__":
                 print("name: ", name)
 
                 model = modelf(in_shape=(x_shape[0], x_shape[1], 1), out_length=y[0].shape[0], activation=act)
-                model.summary()
+                #model.summary()
                 train(model, name, dataset, val=(x, y), start_lr=2**(-start_lr))
                 #infer(name, dataset)
 
