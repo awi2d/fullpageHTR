@@ -68,3 +68,11 @@ def printDirSize():
 
 
 test_linepointenc()
+
+def run_on_server():
+    print("change constants: data_dir, batch_size")
+    print("push to git")
+    print("change constants back")
+    print("connect to docker on server")
+    print("check if gpus are free:")
+

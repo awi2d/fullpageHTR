@@ -93,9 +93,9 @@ def show_trainhistory(history, name="unnamed model"):
 # </debug functions>
 
 
-def train(model, saveName, dataset, val, start_lr=2 ** (-8)):
+def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
-    batch_size = 102400  # TODO find better konstant
+    batch_size = 10000  # TODO find better konstant
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -141,8 +141,7 @@ def train(model, saveName, dataset, val, start_lr=2 ** (-8)):
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val,
-                                       verbose=0)  # steps_per_epoch=len(x_train),
+                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val, verbose=0)  # steps_per_epoch=len(x_train),
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory.history, model.get_weights())
                 model.set_weights(weights_pre)
