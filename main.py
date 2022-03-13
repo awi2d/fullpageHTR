@@ -96,7 +96,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 1024
+    batch_size = 10000
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -283,8 +283,8 @@ if __name__ == "__main__":
                 #grade = test_model(name, dataset)
                 #scores.append((name, grade))
 
-                history = read_dict(name)
-                show_trainhistory(history, name)
+                #history = read_dict(name)
+                #show_trainhistory(history, name)
     scores.sort(key=lambda x: x[1])
     print("scores =", scores)
 
