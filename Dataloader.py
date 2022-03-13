@@ -9,8 +9,8 @@ import random
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-data_dir = "../SimpleHTR/data/trainingDataset/"
-#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+#data_dir = "../SimpleHTR/data/trainingDataset/"
+data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
 iam_dir = data_dir+"iam/"  # the unchanged iam dataset
 dataset_dir = data_dir+"generated/"  # directoy for storing generated data
 models_dir = data_dir+"models/"  # directoy for storing trained models
@@ -108,9 +108,12 @@ def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), 
     ulx, uly = upperleftcorner
     drx = ulx+sampesize[0]
     dry = uly+sampesize[1]
-    goldlabel = [((x1-ulx, y1-uly), (x2-ulx, y2-uly), h) for ((x1, y1), (x2, y2), h) in goldlabel if ulx < min(x1, x2) and uly < min(y1, y2) and max(x1, x2) < drx and max(y1, y2) < dry]
+    print("(ulx, uly, drx, dry) = ", (ulx, uly, drx, dry))
+    print("goldlabel = ", goldlabel)
+    goldlabel = [((x1-ulx, y1-uly), (x2-ulx, y2-uly), h) for ((x1, y1), (x2, y2), h) in goldlabel if (ulx <= min(x1, x2)+1 and uly <= min(y1, y2)+1 and max(x1, x2) <= drx+1 and max(y1, y2)+1 <= dry)]
     if len(goldlabel) == 0:
         goldlabel = [((0, 0), (0, 0), 0)]
+    print("goldlabel = ", goldlabel)
     return np.array(img[uly:dry, ulx:drx], dtype="uint8"), goldlabel
 
 def sample_point(img, goldlabel: [line_point], upperleftcorner: (int, int), sampesize: (int, int)):
@@ -324,13 +327,13 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
     [(image, goldlabel)] like input, but the goldlabel is encoded and image and goldlabel are padded to size
     """
 
-    if size is None:
-        h = int(max([img.shape[0] for (img, gl) in data])/2)  # konstants should always be the same as in rescaling. This will obviusly break with goldlabel_type == text
-        w = int(max([img.shape[1] for (img, gl) in data])/4)
-    else:
+    h = int(max([img.shape[0] for (img, gl) in data])/2)  # konstants should always be the same as in rescaling. This will obviusly break with goldlabel_type == text
+    w = int(max([img.shape[1] for (img, gl) in data])/4)
+    print("Dataloader.encode_and_pad: natural w, h = ", h, ", ", w)
+    if size is not None:
         h = size[0]
         w = size[1]
-    print("Dataloader.encode_and_pad: w, h = ", h, ", ", w)
+    print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
     if goldlabel_type == goldlabel_types.text:
         # get alphabet used
         alphabet_int2char = list(set([c for c in ''.join([txt for (img_path, txt) in data])]))
@@ -347,11 +350,10 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
     elif goldlabel_type == goldlabel_types.linepositions:
         data = [downscale(img, points, 4, 2) for (img, points) in data]  # TODO should be optional
-        #h = int(h/2)
-        #w = int(w/4)
         data = [fitsize(img, gl, w, h) for (img, gl) in data]
         if goldlabel_encoding == goldlabel_encodings.dense:
-            return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2dense(point, max_x=w, max_y=h, y_size=y_size)) for (img, point) in data]
+            data = [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2dense(point, max_x=w, max_y=h, y_size=y_size)) for (img, point) in data]
+            return data
         elif goldlabel_encoding == goldlabel_encodings.onehot:
             return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), linepoint2sparse(point, w, h, y_size)) for (img, point) in data]
         else:
@@ -558,7 +560,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
         data = load_iam(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
     else:
         raise "invalid dataset_loader: "+str(dataset_loader)
-    print("path_gl: ", getType(data))
+    #print("path_gl: ", getType(data))
     #print("data_imgpath_goldlabel = ", data[:5])
     # if goldlabel_type = text: type(data) = [(img: np.array(?, ?), text: string)]
     # if goldlabel_type = linepositions: type(data) = [(img: np.array(?, ?), [point: (int, int)])]
@@ -574,9 +576,9 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
             print("unexpected img_type: ", img_type)
             return None
         data = data[offset:offset+maxcount]
-    print("path_gl_short: ", getType(data))
+    #print("path_gl_short: ", getType(data))
     data = [(load_img(dir+"/"+path), gl) for (path, gl) in data]
-    print("imgword_gl: ", getType(data))
+    #print("imgword_gl: ", getType(data))
     if img_type == img_types.word:
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size)
         print("imgwordenc_gl: ", getType(data))
@@ -587,7 +589,7 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random_choice(word_distance) for unused in range(len(t))]) for t in tmp]
     #print("data_lines[0]: ", data[0])
     #print("data_imgline_goldlabel = ", data[:5])
-    print("imgline_gl: ", getType(data))
+    #print("imgline_gl: ", getType(data))
     if img_type == img_types.line:  # line
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=1)
         print("imglineenc_gl: ", getType(data))
@@ -596,18 +598,20 @@ def getData(dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph,
     tmp = [data[i:i+random_choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
     line_distance = [5, 10]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random_choice(line_distance) for unused in range(len(t))]) for t in tmp]
-    print("imgpara_gl: ", getType(data))
+    #print("imgpara_gl: ", getType(data))
     #print("data_parag[0]: ", data[0])
     #print("data_imgpara_goldlabel = ", data[:5])
     if img_type == img_types.paragraph:  # paragraph
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=max(lines_per_paragrph))
-        print("imgparaenc_gl: ", getType(data))
+        #print("imgparaenc_gl: ", getType(data))
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
 
 class Dataset_test:
+    name = "test"
     def __init__(self, difficulty=0):
         self.diff = difficulty
+        self.name = "test"+str(self.diff)
 
     def get_batch(self, n):
         """
@@ -651,11 +655,12 @@ class Dataset_test:
             else:
                 print("unsuported difficulty: ", self.diff)
                 return None
-            pos.sort(key=lambda x: x[0])
-            r.append((img, points2dense(pos)))
+            if self.diff < 4:
+                pos.sort(key=lambda x: x[0])
+                r.append((img, points2dense(pos)))
         return np.array([d[0] for d in r]), np.array([d[1] for d in r])  # img, goldlabel
 
-    def show(self, batch):
+    def show(self, batch, predicted=None):
         """
         :param batch:
         :type ([img], [goldlabels])
@@ -665,24 +670,32 @@ class Dataset_test:
         x, y = dataset.get_batch(20)
         dataset.show((x, y))
         :return:
-        None, but shows (cv2.imshow) an represantation of the data
+        None, but shows the batch and optional predictions
         """
         assert len(batch[0]) == len(batch[1])
         batch = [(np.array(batch[0][i], dtype="uint8"), dense2points(batch[1][i])) for i in range(len(batch[0]))]
-        for (img, gl) in batch:
-            print("test_dataset.show: img: "+str(img)+" -> "+str(gl))
+        for i in range(len(batch)):
+            #print("test_dataset.show: img: "+str(img)+" -> "+str(gl))
+            (img, gl) = batch[i]
             for point in gl:
-                cv2.circle(img, point, 5, 125, 3)
-            cv2.imshow(str(gl), img)
+                cv2.circle(img, point, radius=5, color=0, thickness=3)
+            if predicted is not None:
+                for p in dense2points(predicted[i]):
+                    cv2.circle(img, p, radius=5, color=125, thickness=2)
+            cv2.imshow("todo", img)
             cv2.waitKey(0)
 
+
+
 class Dataset:
+    name = "real"
     data_dir = None
     gl_type = 0
     gl_encoding = 0
     pos = 0
     dataset_size = -1
     imgsize = (256, 256)
+    add_empty_images = False
 
     def __init__(self, datadir, gl_type, gl_encoding):
         self.data_dir = datadir
@@ -692,6 +705,9 @@ class Dataset:
         self.dataset_size = len(load_iam(datadir, gl_type))
 
     def get_batch(self, size):
+        size = size-3  # drei leere bilder hunzugefuegt
+        #TODO rand unten/rechts wegmachen
+        #TODO leere/rauschbilder einfügen
         #data = get_testdata()
         #return np.array([d[0] for d in data]), np.array([d[1] for d in data])
         #selekt witch part of dset to use
@@ -700,35 +716,59 @@ class Dataset:
             self.pos = self.pos % (self.dataset_size-size)
         data = getData(dir=data_dir, dataset_loader=dataset_names.iam, img_type=img_types.paragraph, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, x_size=self.imgsize)
         self.pos = self.pos+size
+        # include empty images
+        if self.add_empty_images:
+            img = np.zeros(shape=self.imgsize, dtype="uint8")
+            gl = np.array([0]*len(data[0][1]))
+            data.append((img, gl))
+
+            img = np.full(shape=self.imgsize, fill_value=255, dtype="uint8")
+            gl = np.array([0]*len(data[0][1]))
+            data.append((img, gl))
+
+            img = np.array([[random.randrange(0, 255, 1) for unused in range(self.imgsize[0])] for unused in range(self.imgsize[1])])
+            gl = np.array([0]*len(data[0][1]))
+            data.append((img, gl))
+
         x_train = np.array([d[0] for d in data], dtype=float)
         y_train = np.array([d[1] for d in data], dtype=float)
         return x_train, y_train
 
-    def show(self, batch):
+    def show(self, batch, predicted=None):
+        assert len(batch[0]) == len(batch[1])
         h, w = batch[0][0].shape
-        print("main.show_points_data: w, h = ", h, ", ", w)
-        if max([max(p) for (img, p) in batch]) > 1.1 or min([min(p) for (img, p) in batch]) < -0.1:
-            print("main.show_points_data: point outside of bounds. points = ", [points for (img, points) in batch])
-        for (img, points) in batch:
+        batch = [(batch[0][i], batch[1][i]) for i in range(len(batch[0]))]
+        for i in range(len(batch)):
+            (img, points) = batch[i]
             img = np.array(img, dtype="uint8")
-            print("show_points_data.img: ", batch.getType(img))
-            print("show_points_data.pts: ", batch.getType(points))
-            print("show_points_data.pts: ", points)
+            #print("show_points_data.img: ", getType(img))
+            #print("show_points_data.pts: ", getType(points))
+            #print("show_points_data.pts: ", points)
+            predPoints = []
             if self.gl_encoding == goldlabel_encodings.dense:
                 points = dense2linepoints(points, max_x=w, max_y=h)
+                if predicted is not None:
+                    predPoints = dense2linepoints(predicted[i], max_x=w, max_y=h)
             elif self.gl_encoding == goldlabel_encodings.onehot:
                 points = sparse2linepoints(points, max_x=w, max_y=h)
+                if predicted is not None:
+                    predPoints = sparse2linepoints(predicted[i], max_x=w, max_y=h)
             else:
                 print("TODO unsupported gl_encoding in dataset.show: ", self.gl_encoding)
                 points = [((0, 0), (0, 0), 0)]
             for point in points:
                 #print("point = ", point)
-                point = ((max(1, int(point[0][0])), max(1, int(point[0][1]))), (max(1, int(point[1][0])), max(1, int(point[1][1]))), max(1, int(point[2])))
-                cv2.circle(img, point[0], int(point[2]/2), 125, 2)
-                cv2.rectangle(img, (point[0][0]-5, point[0][1]-5), (point[0][0]+5, point[0][1]+5), 125, 2)
+                #point = ((max(1, int(point[0][0])), max(1, int(point[0][1]))), (max(1, int(point[1][0])), max(1, int(point[1][1]))), max(1, int(point[2])))
+                cv2.circle(img, point[0], int(point[2]/2), 0, 3)
+                cv2.rectangle(img, (point[0][0]-5, point[0][1]-5), (point[0][0]+5, point[0][1]+5), 0, 2)
+                cv2.circle(img, point[1], int(point[2]/2), 0, 3)
+                cv2.line(img, point[0], point[1], 0, thickness=3)
+            for point in predPoints:
+                cv2.circle(img, point[0], radius=int(point[2]/2), color=125, thickness=2)
+                cv2.rectangle(img, (point[0][0]-5, point[0][1]-5), (point[0][0]+5, point[0][1]+5), 125, 1)
                 cv2.circle(img, point[1], int(point[2]/2), 125, 2)
-                cv2.line(img, point[0], point[1], 125, thickness=1)
+                cv2.line(img, point[0], point[1], 125, thickness=2)
             cv2.imshow(str(points), img)
-        cv2.waitKey(0)
+            cv2.waitKey(0)
 
-# TODO abgeschnittene Zeilen, leere Seiten einfügen
+# TODO abgeschnittene Zeilen
