@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 from keras import backend
 import time
-import cv2
 
 import Dataloader
 import Models
@@ -110,7 +109,7 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
     lr = start_lr
     lr_mult = [0.5, 1,
                2]  # at every step: train with all [lr*m for m in lr_mult] learning rates, pick the weights and lr that has the best validation_loss
-    print("learning rate: ", lr, end=' ')
+    print("learning rate: ", end=' ')
     history = {"loss": [], "val_loss": [], "lr": []}
     old_lr = -1
     older_lr = -2
@@ -122,7 +121,6 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
     short_epochs = 2
     best_model = (valLoss, model.get_weights())
     while True:
-
         if lr == old_lr or lr == older_lr:
             # train for long
             print(str(lr) + "L", end=' ')
@@ -193,7 +191,7 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
     model.set_weights(best_model[1])
     model.save(Dataloader.models_dir + saveName + ".h5")
     save_dict(history, saveName)
-    # show_trainhistory(history, saveName)
+    show_trainhistory(history, saveName)
     return history
 
 
@@ -206,16 +204,18 @@ def infer(name, dataset):
     print("infe.input_size: ", input_size)
     for img in test_x:
         # test that all images have the correct size for the tf.model
+        if not (img.shape[0] == input_size[0] and img.shape[1] == input_size[1]):
+            print("img shape = ", img.shape, " and input shape = ", input_size, " should be the same")
         assert img.shape[0] == input_size[0] and img.shape[1] == input_size[1]
     # [(assert img.shape == input_size) for img in test_x] why, python? I just want to use assert statements in list comprehensions. is that to much?
     infered = []
     for img in [np.reshape(img, (1, img.shape[0], img.shape[1])) for img in test_x]:
-        if img.shape[0] > input_size[0] or img.shape[1] > input_size[1]:
-            print("validation image has to be the same size or smaler than largest training image")
-            return None
+        #if img.shape[0] > input_size[0] or img.shape[1] > input_size[1]:
+        #    print("img shape = ", img.shape, " and input shape = ", input_size, " should be the same")
+        #    print("validation image has to be the same size or smaler than largest training image")
+        #    return None
         points = model.predict([img])  # returns list of predictions.
-        # print("infer: ", img, " -> ", points)
-        #print("   infer: ", points)
+        print("infer: ", img, " -> ", points)
         infered.append(points[0])
         # img is of type float, cv2 needs type int to show.
     # test_x = dataset.show((test_x, test_y))
@@ -256,10 +256,20 @@ def test_model(name, dataset):
 
 if __name__ == "__main__":
     print("start")
-    # TODO Montag email fortschritt
+    #infer("testrnn", Dataloader.RNNDataset())
+    #exit(0)
+    m = Models.simpleHTR()
+    ds = Dataloader.Dataset(Dataloader.data_dir, gl_type=Dataloader.goldlabel_types.text, gl_encoding=Dataloader.goldlabel_encodings.onehot, img_type=Dataloader.img_types.line)
+    #ds.show(ds.get_batch(10))
+    train(m, "simpleHTR", ds, ds.get_batch(10))
+    exit(0)
     dataset = Dataloader.Dataset(Dataloader.data_dir, Dataloader.goldlabel_types.linepositions, Dataloader.goldlabel_encodings.dense)
     #dataset = Dataloader.Dataset_test(3)
     #dataset.show(dataset.get_batch(20))
+    #names = ["real_convhard_sigmoid_mse_lr8", "real_convswish_mse_lr8", "real_cvfflinear_mse_lr8", "real_vgg11hard_sigmoid_mse_lr8"]  # scheinen zu funktionieren
+    #for n in names:
+    #    print("\n", n)
+    #    infer(n, dataset)
     #exit(0)
     x, y = dataset.get_batch(1024)  # validation data
     x_shape = x[0].shape
@@ -275,10 +285,10 @@ if __name__ == "__main__":
                 name = dataset.name + "_" + str(modelf.__name__) + str(act) + "_mse_lr" + str(start_lr)
                 print("name: ", name)
 
-                model = modelf(in_shape=(x_shape[0], x_shape[1], 1), out_length=y[0].shape[0], activation=act)
+                #model = modelf(in_shape=(x_shape[0], x_shape[1], 1), out_length=y[0].shape[0], activation=act)
                 #model.summary()
-                train(model, name, dataset, val=(x, y), start_lr=2**(-start_lr))
-                #infer(name, dataset)
+                #train(model, name, dataset, val=(x, y), start_lr=2**(-start_lr))
+                infer(name, dataset)
 
                 #grade = test_model(name, dataset)
                 #scores.append((name, grade))
@@ -287,6 +297,8 @@ if __name__ == "__main__":
                 #show_trainhistory(history, name)
     scores.sort(key=lambda x: x[1])
     print("scores =", scores)
+
+scores = [('real_convhard_sigmoid_mse_lr8', 5954), ('real_cvfflinear_mse_lr8', 6660), ('real_convswish_mse_lr8', 7492), ('real_vgg11hard_sigmoid_mse_lr8', 9320), ('real_fullyconnectedFedforwardswish_mse_lr8', 41178), ('real_cvffhard_sigmoid_mse_lr8', 42088), ('real_vgg11swish_mse_lr8', 42398), ('real_vgg11linear_mse_lr8', 43094), ('real_cvffswish_mse_lr8', 43234), ('real_convlinear_mse_lr8', 43262), ('real_fullyconnectedFedforwardlinear_mse_lr8', 43804), ('real_fullyconnectedFedforwardhard_sigmoid_mse_lr8', 72168)]
 
 scores = [('test3_convhard_sigmoid_mse_lr8', 4940), ('test3_convswish_mse_lr8', 5398), ('test3_convlinear_mse_lr8', 5446), ('test3_convelu_mse_lr8', 5760), ('test3_convlinear_mse_lr8', 5776), ('test3_convsigmoid_mse_lr8', 6076), ('test3_convrelu_mse_lr8', 6094), ('test3_convsoftplus_mse_lr8', 6160), ('test3_convselu_mse_lr8', 6322), ('test3_cvffrelu_mse_lr8', 6504), ('test3_cvffselu_mse_lr8', 6792), ('test3_convsoftsign_mse_lr8', 6878), ('test3_convexponential_mse_lr8', 7382), ('test3_convtanh_mse_lr8', 16024),
           ('test3_cvffhard_sigmoid_mse_lr8', 6968), ('test3_cvffswish_mse_lr8', 7006), ('test3_cvffsoftsign_mse_lr8', 7950), ('test3_cvffelu_mse_lr8', 7968), ('test3_cvfftanh_mse_lr8', 7994), ('test3_cvffgelu_mse_lr8', 8128), ('test3_cvfflinear_mse_lr8', 8408), ('test3_cvfflinear_mse_lr8', 8454), ('test3_cvffsoftplus_mse_lr8', 8540), ('test3_cvffsigmoid_mse_lr8', 8770), ('test3_cvffexponential_mse_lr8', 10524),
