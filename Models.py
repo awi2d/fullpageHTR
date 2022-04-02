@@ -173,6 +173,7 @@ def conv(in_shape=(32, 32, 1), out_length=6, activation='linear'):
 
 
 def simpleHTR(in_shape=(32, 128, 1), out_length=27, activation='relu'):
+    # Eingabe auf ganzen Bild+Linepoint ändern.
     assert in_shape[0] == 32
     # should be the same as simpleHTR, but migrated to tensorflow2
     # https://towardsdatascience.com/build-a-handwritten-text-recognition-system-using-tensorflow-2326a3487cd5
