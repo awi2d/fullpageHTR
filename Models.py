@@ -207,7 +207,7 @@ def simpleHTR(in_shape=(32, 128, 1), out_length=27, activation='relu'):
 
     """setup_rnn"""
     model.add(tf.keras.layers.Reshape((32, 256)))
-    #current tensor shape (None, 32, 256)
+    #current tensor size: (None, 32, 256)
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True)))  # maybe not exactly the same as original simpleHTR
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True)))
     #current tensor size: (None, 32, 512)

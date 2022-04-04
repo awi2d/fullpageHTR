@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import tensorflow as tf
 from keras import backend
@@ -254,30 +255,57 @@ def test_model(name, dataset):
     return score
 
 
+def test_rotate_img():
+    img = [np.zeros((128, 128), dtype="uint8") for unused in range(3)]
+
+    gl = [[(15, 64), (15, 64), 20], [(128, 64), (128, 64), 20], [(64, 64), (64, 64), 20]]
+    for i in range(len(img)):
+        cv2.circle(img[i], gl[i][0], radius=gl[i][2], color=255, thickness=gl[i][2])
+        #cv2.line(img[i], gl[i][0], gl[i][1], 255, thickness=gl[i][2])
+    for i in range(len(img)):
+        cv2.imshow("img", img[i])
+        cv2.waitKey(0)
+        print("gl["+str(i)+"] = ", gl[i])
+        img[i], gl[i] = Dataloader.rotate_img(img[i], [gl[i]], Dataloader.GoldlabelTypes.linepositions, 10)
+        gl[i] = gl[i][0]
+        print("gl["+str(i)+"] = ", gl[i])
+        cv2.imshow("img", img[i])
+        cv2.waitKey(0)
+        cv2.circle(img[i], gl[i][0], radius=gl[i][2]-1, color=100, thickness=gl[i][2]-2)
+        #cv2.line(img[i], gl[i][0], gl[i][1], 100, thickness=gl[i][2]-2)
+        cv2.imshow("img", img[i])
+        cv2.waitKey(0)
+    gl = Dataloader.linepoint2dense(gl, 128, 128, 3)
+    img = [Dataloader.extractline(img[i], gl[i*5:(i+1)*5], max_x=128, max_y=128) for i in range(len(img))]
+    for i in range(len(img)):
+        cv2.imshow(str(gl[i]), img[i])
+    exit(0)
+
 if __name__ == "__main__":
-    # TODO Modelle (selbst und aus Papern visualisieren)
+    # TODO Modelle (selbst und aus Papern) visualisieren
     # simpleHTR trainieren
     # hwr_sheidl_TF2 villeicht code kopieren
     # lineRecognition
     print("start")
-    #infer("testrnn", Dataloader.RNNDataset())
-    #exit(0)
     #print("simpleHTR")
-    m = Models.simpleHTR()
-    ds = Dataloader.Dataset(Dataloader.data_dir, gl_type=Dataloader.goldlabel_types.text, gl_encoding=Dataloader.goldlabel_encodings.onehot, img_type=Dataloader.img_types.line)
+    #m = Models.simpleHTR()
+    #ds = Dataloader.Dataset(Dataloader.data_dir, gl_type=Dataloader.goldlabel_types.text, gl_encoding=Dataloader.goldlabel_encodings.onehot, img_type=Dataloader.img_types.line)
     #ds.show(ds.get_batch(10))
-    train(m, "simpleHTR", ds, ds.get_batch(64))
+    #train(m, "simpleHTR", ds, ds.get_batch(64))
+    #exit(0)
+    dataset = Dataloader.Dataset(Dataloader.data_dir, Dataloader.GoldlabelTypes.linepositions, Dataloader.GoldlabelEncodings.dense, img_type=Dataloader.ImgTypes.paragraph)
+    dataset.show(dataset.get_batch(10))
+    cv2.waitKey(0)
     exit(0)
-    dataset = Dataloader.Dataset(Dataloader.data_dir, Dataloader.goldlabel_types.linepositions, Dataloader.goldlabel_encodings.dense)
-    img, gl = dataset.get_batch(10)
-    #img = [Dataloader.extractline(img[i], gl[i][0:5], max_x=32, max_y=32) for i in range(len(img))]
-    #dataset = Dataloader.Dataset_test(3)
+    #img, gl = dataset.get_batch(10)
+    #dataset.show((img, gl))
     #dataset.show(dataset.get_batch(20))
     #names = ["real_convhard_sigmoid_mse_lr8", "real_convswish_mse_lr8", "real_cvfflinear_mse_lr8", "real_vgg11hard_sigmoid_mse_lr8"]  # scheinen zu funktionieren
     #for n in names:
     #    print("\n", n)
     #    infer(n, dataset)
     exit(0)
+    dataset = Dataloader.Dataset(Dataloader.data_dir, gl_type=Dataloader.GoldlabelTypes.text, gl_encoding=Dataloader.GoldlabelEncodings.onehot, img_type=Dataloader.ImgTypes.line)
     x, y = dataset.get_batch(1024)  # validation data
     x_shape = x[0].shape
     print(x_shape, " -> ", y[0].shape)
