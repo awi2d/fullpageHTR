@@ -11,9 +11,9 @@ line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of l
 
 # data_dir = "../SimpleHTR/data/trainingDataset/"
 data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
-iam_dir = data_dir+"iam/"  # the unchanged iam dataset
-dataset_dir = data_dir+"generated/"  # directoy for storing generated data
-models_dir = data_dir+"models/"  # directoy for storing trained models
+iam_dir = data_dir + "iam/"  # the unchanged iam dataset
+dataset_dir = data_dir + "generated/"  # directoy for storing generated data
+models_dir = data_dir + "models/"  # directoy for storing trained models
 
 
 class GoldlabelTypes:
@@ -59,7 +59,7 @@ def downscale(img, goldlabel: [line_point], x: int, y: int, gl_type=GoldlabelTyp
     return np.array(img, dtype="uint8"), goldlabel
 
 
-def extractline(img, linepoint, max_x, max_y):
+def extractline(img, linepoint: [float], max_x: int, max_y: int):
     """
     :param img:
     :param linepoint:
@@ -67,39 +67,42 @@ def extractline(img, linepoint, max_x, max_y):
     :return:
     the normalised part of the image where the text line described by linepoint should be
     """
+    assert len(linepoint) == 5
     img = np.array(img, dtype="uint8")
-    cv2.imshow("pre", img)
 
-    print("Datloader.extractline: linepoint = ", linepoint)
+    #print("Datloader.extractline: linepoint = ", linepoint)
     linepoint = dense2linepoints(linepoint, max_x=max_x, max_y=max_y)
-    print("Datloader.extractline: linepoint = ", linepoint)
+    #print("Datloader.extractline: linepoint = ", linepoint)
     #rotate image so that line is horizontal
-    ((x1, y1), (x2, y2), h) = linepoint[0]
+    ((x1, y1), (x2, y2), h_lp) = linepoint[0]
     # y1 == y2 => ist bereits gerade
     if abs(x2-x1)+abs(y2-y1) < 5:
         # <=> is empty  ((0, 0), (0, 0), 0) linepoint
+        print("Dataloader.extractline: empty linepoint -> return black empty image")
         return np.zeros((32, 128))
     if abs(y2-y1) > 1:  # line is not already horizontal
-        alpha = np.arcsin(abs(x2-x1)/(np.sqrt((x2-x1)**2+(y2-y1)**2)))
-        print("Dataloader.extractline: alpha = ", alpha)
-        img, linepoint = rotate_img(img, linepoint, GoldlabelTypes.linepositions, angle=int(alpha))
-        ((x1, y1), (x2, y2), h) = linepoint[0]
+        alpha = np.arcsin((y2-y1)/(np.sqrt((x2-x1)**2+(y2-y1)**2)))
+        #print("Dataloader.extractline:  alpha = ", alpha)
+        #print("Dataloader.extractline: y1 == y2: ", y1, " == ", y2)
+        img, linepoint = rotate_img(img, linepoint, GoldlabelTypes.linepositions, angle=int(alpha*(180/np.pi)))
+        ((x1, y1), (x2, y2), h_lp) = linepoint[0]
+        #print("Dataloader.extractline: y1 == y2: ", y1, " == ", y2)
     # cut line
-    print("linepoint = ", linepoint)
-    print("y1 == y2: ", y1, " == ", y2)
-    (h, w) = img.shape
-    left_bound = max(0, int(x1-h))
-    right_bound = min(w, int(x2+h))
-    upper_bound = max(0, int(y1-h))
-    lower_bound = min(h, int(y1+h))
+    #cv2.imshow("rotated", img)
+    #cv2.waitKey(0)
+    print("Dataloader.extractline: linepoint = ", linepoint)
+    (h_img, w) = img.shape
+    print("Dataloader.extractline: img.shape = ", (h_img, w))
+    y = int(0.5*y1+0.5*y2)  # y1 and y2 should already be almost the same
+    left_bound = max(0, int(x1-h_lp))
+    right_bound = min(w, int(x2+h_lp))
+    upper_bound = max(0, int(y-h_lp))
+    lower_bound = min(h_img, int(y+h_lp))
+    #print("Dataloader.extractline: bounds = ", ((left_bound, right_bound), (upper_bound, lower_bound)))
     img = np.array(img[left_bound:right_bound][upper_bound:lower_bound], dtype="uint8")
     # scale image to hight of 32
-    print("img.shape = ", img.shape)
-    img = cv2.resize(img, (128, 32), interpolation=cv2.INTER_AREA)
-
-    cv2.imshow("post", img)
-    cv2.waitKey(0)
-    return img
+    print("Dataloader.extractline: img.shape = ", img.shape)
+    return cv2.resize(img, (128, 32), interpolation=cv2.INTER_AREA)
 
 
 # <debug functions>
@@ -808,7 +811,7 @@ class RNNDataset:
 
 class Dataset:
     name = "real"
-    data_dir = None
+    data_directory = None
     gl_type = 0
     gl_encoding = 0
     pos = 0
@@ -816,8 +819,8 @@ class Dataset:
     imgsize = (32, 32)
     add_empty_images = True
 
-    def __init__(self, datadir, gl_type=GoldlabelTypes.linepositions, gl_encoding=GoldlabelEncodings.dense, img_type=ImgTypes.paragraph):
-        self.data_dir = datadir
+    def __init__(self, datadir=data_dir, gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph):
+        self.data_directory = datadir
         self.gl_type = gl_type
         self.img_type = img_type
         self.gl_encoding = gl_encoding
@@ -840,7 +843,7 @@ class Dataset:
         assert size < self.dataset_size
         if self.pos+size >= self.dataset_size:
             self.pos = self.pos % (self.dataset_size-size)
-        data = getData(dir=data_dir, dataset_loader=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize)
+        data = getData(dir=self.data_directory, dataset_loader=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize)
         self.imgsize = data[0][0].shape
         self.pos = self.pos+size
         # include empty images
