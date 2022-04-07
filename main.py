@@ -96,7 +96,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 128  # 1024 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+    batch_size = 4  # 1024 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])

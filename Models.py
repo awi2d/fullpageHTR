@@ -249,7 +249,7 @@ def simpleHTR(in_shape=(32, 128, 1), out_length=27, activation='relu'):
     return model
 
 
-def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet)+1, activation='relu', lr=3e-4):
+def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), activation='relu', lr=3e-4):  # TODO add +1 to len(alphabet) ctc-blank label
     """
     :param in_shape: The size of the input to the network.
     :param out_length: The size of the output.
@@ -340,7 +340,7 @@ def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet)+1, a
 
     model = keras.Model(inputs=input_data, outputs=output_data, name="simpleHTR2")
     opt = tf.keras.optimizers.Adam(learning_rate=lr, beta_1=0.5)
-    model.compile(loss=keras.losses.SparseCategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
+    model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
 
