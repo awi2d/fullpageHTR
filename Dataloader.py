@@ -9,8 +9,8 @@ import random
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-# data_dir = "../SimpleHTR/data/trainingDataset/"
-data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+data_dir = "../SimpleHTR/data/trainingDataset/"
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
 iam_dir = data_dir + "iam/"  # the unchanged iam dataset
 dataset_dir = data_dir + "generated/"  # directoy for storing generated data
 models_dir = data_dir + "models/"  # directoy for storing trained models
@@ -249,11 +249,11 @@ def dense2points(points: [float], max_x=32, max_y=32) -> [(int, int)]:
     return [(int(points[2*i]*max_x), int(points[2*i+1]*max_x)) for i in range(int(len(points)/2))]
 
 
-alphabet = np.array([' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'])
+alphabet = np.array([""]+list(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!"))
 def txt2sparse(txt, y_size):
     #print("Dataloader.txt2sparse: txt ", len(txt), ", ysize ", y_size)
     assert len(txt) <= y_size
-    txt = txt.lower()
+    #txt = txt.lower()
     a = np.array([(np.argwhere(alphabet == c)[0][0] if c in alphabet else 0) for c in txt])
     #b = np.zeros(y_size*len(alphabet))
     b = np.zeros((y_size, len(alphabet)))
@@ -346,7 +346,7 @@ def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), 
     :return:
     an image that shows an area out of th input image and the edited goldlabel
     """
-    print("Dataloader.sample_linepoint")
+    #print("Dataloader.sample_linepoint")
     ulx, uly = upperleftcorner  # up-left corner
     drx = ulx+sampesize[0]  # down-right corner
     dry = uly+sampesize[1]
@@ -379,7 +379,7 @@ def fitsize(img, gl, w, h, gl_type=GoldlabelTypes.linepositions):
     :return:
     the image and goldlabel, so that they still are consistent and the image has exactly the shape (h, w)
     """
-    print("Dataloader.fitsiz: (h, w) = ", (h, w))
+    #print("Dataloader.fitsiz: (h, w) = ", (h, w))
     if gl_type == GoldlabelTypes.linepositions:
         if img.shape[0] >= h:
             img, gl = sample_linepoint(img, gl, (0, 0), (img.shape[0], h-1))
@@ -414,11 +414,11 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
     """
     h = int(max([img.shape[0] for (img, gl) in data])/2)  # konstants should always be the same as in rescaling. This will obviusly break with goldlabel_type == text
     w = int(max([img.shape[1] for (img, gl) in data])/4)
-    print("Dataloader.encode_and_pad: natural w, h = ", h, ", ", w)
+    #print("Dataloader.encode_and_pad: natural w, h = ", h, ", ", w)
     if size is not None:
         h = size[0]
         w = size[1]
-    print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
+    #print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
     data = [downscale(img, points, 4, 2, gl_type=goldlabel_type) for (img, points) in data]  # TODO should be optional
     data = [fitsize(img, gl, w, h, gl_type=goldlabel_type) for (img, gl) in data]
     if goldlabel_type == GoldlabelTypes.text:
@@ -635,8 +635,10 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
     if goldlabel_type not in [vars(GoldlabelTypes)[x] for x in vars(GoldlabelTypes).keys() if not x.startswith("__")]:
         print("Dataloader.getData(", dir, ", ", dataset_loader, ", ", img_type, ", ", maxcount, "): invalid input, goldlabel_type should be ", GoldlabelTypes)
         return None
-    words_per_line = [2, 3]
+    words_per_line = [7, 8, 9]
     lines_per_paragrph = [3, 4]
+
+    max_chars_per_line = 128
 
     if dataset_loader == DatasetNames.iam:
         data = load_iam(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
@@ -683,7 +685,7 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
         if goldlabel_type == GoldlabelTypes.linepositions:
             ys = 1
         elif goldlabel_type == GoldlabelTypes.text:
-            ys = 32  # max([len(d[1]) for d in data])
+            ys = max_chars_per_line  # max([len(d[1]) for d in data])
         else:
             ys = 1
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
@@ -702,7 +704,7 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
         if goldlabel_type == GoldlabelTypes.linepositions:
             ys = max(lines_per_paragrph)
         elif goldlabel_type == GoldlabelTypes.text:
-            ys = max([len(d[1]) for d in data])
+            ys = max_chars_per_line*max(lines_per_paragrph)  # max([len(d[1]) for d in data])
         else:
             ys = 1
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
@@ -710,7 +712,34 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
 
-class Dataset_test:
+
+class abstractDataset:
+    name = "TODO overwrite in subclasses"
+    x = [float]
+    y = [float]
+    def get_batch(self, n:int) -> ([x], [y]):
+        """
+        :param n:
+        the number of elements in the batch returned
+        :return:
+        (data, goldlabel), so that tf.keras.model.fit(x=data, y=goldlabel, [...]) works.
+        e.g. goldlabel[i] is the goldlabel for data[i]
+        """
+        return None
+
+    def show(self, batch: ([x], [y]), predicted: [y] = None) -> None:
+        """
+        :param batch:
+        a batch of the same type as returned by get_batch
+        :param predicted:
+        if not None should be the same type and dimensions as batch[1]
+        :return:
+        None, but displays the batch. optionally with predicted labels
+        """
+        return None
+
+
+class Dataset_test(abstractDataset):
     name = "test"
     def __init__(self, difficulty=0):
         self.diff = difficulty
@@ -788,7 +817,7 @@ class Dataset_test:
             cv2.imshow("todo", img)
             cv2.waitKey(0)
 
-class RNNDataset:
+class RNNDataset(abstractDataset):
     name = "RNN test dataset"
     def get_batch(self, size):
         x_train = []
@@ -809,7 +838,7 @@ class RNNDataset:
         for i in range(len(batch[0])):
             print(batch[0][i], "->", batch[1][i], "| ", predicted[i])
 
-class Dataset:
+class Dataset(abstractDataset):
     name = "real"
     data_directory = None
     gl_type = 0
@@ -818,24 +847,28 @@ class Dataset:
     dataset_size = -1
     imgsize = (32, 32)
     add_empty_images = True
+    #super.x = [[float]]  # image
+    #super.y = [float]  # linepoint
 
-    def __init__(self, datadir=data_dir, gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph):
+    @classmethod
+    def htr(cls):
+        return cls(gl_encoding=GoldlabelEncodings.onehot, gl_type=GoldlabelTypes.text, img_type=ImgTypes.line, img_size=(128, 2048), line_para_winkel=(3, 0), flip=True)
+    @classmethod
+    def linefinder(cls):
+        return cls(gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(128*5, 2048), line_para_winkel=(3, 8))
+
+
+    def __init__(self, datadir=data_dir, gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(32, 32), line_para_winkel=(0, 0), flip=False):
         self.data_directory = datadir
         self.gl_type = gl_type
         self.img_type = img_type
         self.gl_encoding = gl_encoding
+        self.imgsize = img_size
+        self.line_para_winkel = line_para_winkel
+        self.do_not_fix_dimensions_just_flip = flip
         self.pos = 0
         self.dataset_size = len(load_iam(datadir, gl_type))
-        if self.img_type == ImgTypes.line:
-            self.imgsize = (32, 128)
-            self.line_para_winkel = (10, 0)
-        elif self.img_type == ImgTypes.paragraph:
-            self.imgsize = (256, 256)
-            self.line_para_winkel = (5, 10)
-        else:
-            self.imgsize = (32, 64)  # word or invalid input
-            self.line_para_winkel = (0, 0)
-        self.imgsize = None
+
 
     def get_batch(self, size):
         size = size-3  # drei leere bilder hunzugefuegt
@@ -864,9 +897,13 @@ class Dataset:
             gl = np.zeros(yshape)
             data.append((img, gl))
         print("Dataloader.Dataset.get_batch: data = ", getType(data))
-        x_train = np.array([d[0] for d in data], dtype=float)
+        if self.do_not_fix_dimensions_just_flip:
+            x_train = np.array([np.transpose(d[0]) for d in data], dtype=float)
+        else:
+            x_train = np.array([d[0] for d in data], dtype=float)
         y_train = np.array([d[1] for d in data], dtype=float)
         return x_train, y_train
+        #return tf.data.Dataset.from_tensor_slices((x_train, y_train)) maybe using this could be more efficent
 
 
     def show(self, batch, predicted=None):

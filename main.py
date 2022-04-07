@@ -96,7 +96,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 1024
+    batch_size = 128  # 1024 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -229,56 +229,64 @@ def infer(name, dataset):
     # print("model, accuracy: {:5.2f}%".format(100 * acc))
 
 
-def test_model(name, dataset):
-    test_x, test_y = dataset.get_batch(32 ** 2)
-    model = tf.keras.models.load_model(Dataloader.models_dir + name + ".h5")
-    config = model.get_config()  # Returns pretty much every information about your model
-    input_size = config["layers"][0]["config"]["batch_input_shape"][1:]  # returns a tuple of width, height and channels
-    # input_size = model.layers[0].input_shape[0][1:]  # for test.h5 from findfollowreadlite_dense
-    print("infe.input_size: ", input_size)
-    for img in test_x:
-        # test that all images have the correct size for the tf.model
-        assert img.shape[0] == input_size[0] and img.shape[1] == input_size[1]
-    infered = []
-    for img in [np.reshape(img, (1, img.shape[0], img.shape[1])) for img in test_x]:
-        if img.shape[0] > input_size[0] or img.shape[1] > input_size[1]:
-            print("validation image has to be the same size or smaler than largest training image")
-            return None
-        points = model.predict([img])  # returns list of predictions.
-        # print(img, " -> ", points)
-        infered.append(points[0])
-    score = 0
-    for i in range(len(test_y)):
-        gl = Dataloader.dense2points(test_y[i])
-        pred = Dataloader.dense2points(infered[i])
-        score += sum(abs(gl[t][0] - pred[t][0]) + abs(gl[t][0] - pred[t][0]) for t in range(len(gl)))
-    return score
+def show_models(model, name, dataset):
+    # https://www.tensorflow.org/tensorboard/get_started
+    # https://www.tensorflow.org/tensorboard/graphs
+    # tensorboard --logdir C:\Users\Idefix\PycharmProjects\SimpleHTR\data\modelgraph\
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=Dataloader.data_dir+"modelgraph/"+name)
+    x, y = dataset.get_batch(10)
+    model.fit(x, y, batch_size=1, epochs=1, callbacks=[tensorboard_callback])
+
+
+    linedetection_models = [("fcff", Models.fullyconnectedFedforward), ("fcff2", Models.fullyconnectedFedforward2), ("cvff", Models.cvff), ("conv", Models.conv), ("vgg11", Models.vgg11)]
+    dataset = Dataloader.Dataset(Dataloader.data_dir, Dataloader.GoldlabelTypes.linepositions, Dataloader.GoldlabelEncodings.dense, img_type=Dataloader.ImgTypes.paragraph)
+    x, y = dataset.get_batch(10)
+    in_shape = (x[0].shape[0], x[0].shape[1], 1)
+    out_length = len(y[0])
+    print(in_shape, " -> ", out_length)
+    for (mn, mf) in linedetection_models:
+        print("name = ", mn)
+        model = mf(in_shape=in_shape, out_length=out_length, activation="hard_sigmoid")
+        model.summary()
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=Dataloader.data_dir+"modelgraph/"+mn)
+        x, y = dataset.get_batch(10)
+        model.fit(x, y, batch_size=1, epochs=1, callbacks=[tensorboard_callback])
+        print("\n\n")
+    readline_models = [("simpleHTR", Models.simpleHTR), ("simpleHTR2", Models.simpleHTR2)]
+    dataset = Dataloader.Dataset(gl_type=Dataloader.GoldlabelTypes.text, img_type=Dataloader.ImgTypes.line, gl_encoding=Dataloader.GoldlabelEncodings.onehot)
+    for (mn, mf) in readline_models:
+        print("name = ", mn)
+        model = mf(in_shape=(32, 128, 1), out_length=27, activation="hard_sigmoid")
+        model.summary()
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=Dataloader.data_dir+"modelgraph/"+mn)
+        x, y = dataset.get_batch(10)
+        model.fit(x, y, batch_size=1, epochs=1, callbacks=[tensorboard_callback])
+    exit(0)
+
 
 
 if __name__ == "__main__":
-    # TODO Modelle (selbst und aus Papern) visualisieren
-    # simpleHTR trainieren
-    # hwr_sheidl_TF2 villeicht code kopieren
+    # TODO attention lernen und anwenden
+    # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
+    # cnn1 = Attention(..., img, linepoints)
+    # cnn2 = Attention(..., img, linepoints)
+    # simpleHTR trainieren (auch wenn <5 MiB belegt)
+    # conv und simpleHTR2 zusammenfügen (mit attention oder ausschneiden)
+    # inputbild vergrößern (1500x2000)
+    # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
     print("start")
-    conv = Models.conv(in_shape=(256, 256, 1), out_length=6, activation="hard_sigmoid")
-    conv.summary()
-    exit(0)
     # train simpleHTR
-    #print("simpleHTR")
-    #m = Models.simpleHTR()
-    #ds = Dataloader.Dataset(Dataloader.data_dir, gl_type=Dataloader.goldlabel_types.text, gl_encoding=Dataloader.goldlabel_encodings.onehot, img_type=Dataloader.img_types.line)
-    #ds.show(ds.get_batch(10))
-    #train(m, "simpleHTR", ds, ds.get_batch(64))
-    #exit(0)
-    # show dataset
-    #dataset = Dataloader.Dataset(Dataloader.data_dir, Dataloader.GoldlabelTypes.linepositions, Dataloader.GoldlabelEncodings.dense, img_type=Dataloader.ImgTypes.paragraph)
-    #dataset.show(dataset.get_batch(10))
-    #cv2.waitKey(0)
-    #exit(0)
-    #img, gl = dataset.get_batch(10)
-    #dataset.show((img, gl))
-    #dataset.show(dataset.get_batch(20))
+    ds_htr = Dataloader.Dataset.htr()
+    #ds_htr.show(ds_htr.get_batch(10))
+    model_sHTR2 = Models.simpleHTR2()
+    train(model_sHTR2, "simpleHTR2", ds_htr, ds_htr.get_batch(64))
+    del ds_htr
+    ds_linefinder = Dataloader.Dataset.linefinder()
+    #ds_linefinder.show(ds_linefinder.get_batch(10))
+    model_conv = Models.conv(in_shape=(ds_linefinder.imgsize[0], ds_linefinder.imgsize[1], 1), out_length=20)
+    train(model_conv, "conv", ds_linefinder, ds_linefinder.get_batch(64))
+    exit(0)
     #names = ["real_convhard_sigmoid_mse_lr8", "real_convswish_mse_lr8", "real_cvfflinear_mse_lr8", "real_vgg11hard_sigmoid_mse_lr8"]  # scheinen zu funktionieren
     #for n in names:
     #    print("\n", n)
