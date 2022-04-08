@@ -96,7 +96,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 4  # 1024 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+    batch_size = 1024  # führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -279,12 +279,13 @@ if __name__ == "__main__":
     # train simpleHTR
     ds_htr = Dataloader.Dataset.htr()
     #ds_htr.show(ds_htr.get_batch(10))
-    model_sHTR2 = Models.simpleHTR2()
-    train(model_sHTR2, "simpleHTR2", ds_htr, ds_htr.get_batch(64))
+    model_sHTR = Models.simpleHTR(in_shape=ds_htr.imgsize)
+    train(model_sHTR, "simpleHTR", ds_htr, ds_htr.get_batch(64))
     del ds_htr
+    del model_sHTR
     ds_linefinder = Dataloader.Dataset.linefinder()
     #ds_linefinder.show(ds_linefinder.get_batch(10))
-    model_conv = Models.conv(in_shape=(ds_linefinder.imgsize[0], ds_linefinder.imgsize[1], 1), out_length=20)
+    model_conv = Models.conv(in_shape=(ds_linefinder.imgsize[0], ds_linefinder.imgsize[1], 1), out_length=35)
     train(model_conv, "conv", ds_linefinder, ds_linefinder.get_batch(64))
     exit(0)
     #names = ["real_convhard_sigmoid_mse_lr8", "real_convswish_mse_lr8", "real_cvfflinear_mse_lr8", "real_vgg11hard_sigmoid_mse_lr8"]  # scheinen zu funktionieren

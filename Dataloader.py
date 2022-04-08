@@ -9,8 +9,8 @@ import random
 
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 
-data_dir = "../SimpleHTR/data/trainingDataset/"
-#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"  # The dirctory that is mapped to not be in the docker
+data_dir = "../SimpleHTR/data/trainingDataset/" # The dirctory that is mapped to not be in the docker
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
 iam_dir = data_dir + "iam/"  # the unchanged iam dataset
 dataset_dir = data_dir + "generated/"  # directoy for storing generated data
 models_dir = data_dir + "models/"  # directoy for storing trained models
@@ -395,7 +395,7 @@ def fitsize(img, gl, w, h, gl_type=GoldlabelTypes.linepositions):
     return img, gl
 
 
-def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1):
+def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1, downsample=(2, 4)):
     """
     :param data:
     data of type [(image, goldlabel)]
@@ -409,17 +409,24 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
     that means they either get padded are cliped.
     :param y_size:
     size all goldlabel_encodings in data will have
+    :param downsample:
+    before being padded or cliped to size, all images get downsampled by downsample[0] on the dim0-axis (hight) and downsample[1] on the dim1-axis (width)
     :return:
     [(image, goldlabel)] like input, but the goldlabel is encoded and image and goldlabel are padded to size
     """
-    h = int(max([img.shape[0] for (img, gl) in data])/2)  # konstants should always be the same as in rescaling. This will obviusly break with goldlabel_type == text
-    w = int(max([img.shape[1] for (img, gl) in data])/4)
-    #print("Dataloader.encode_and_pad: natural w, h = ", h, ", ", w)
-    if size is not None:
+
+
+
+
+    data = [downscale(img, points, downsample[1], downsample[0], gl_type=goldlabel_type) for (img, points) in data]  # TODO should be optional
+    if size is None:
+        h = int(max([img.shape[0] for (img, gl) in data]))
+        w = int(max([img.shape[1] for (img, gl) in data]))
+        #print("Dataloader.encode_and_pad: natural w, h = ", h, ", ", w)
+    else:
         h = size[0]
         w = size[1]
-    #print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
-    data = [downscale(img, points, 4, 2, gl_type=goldlabel_type) for (img, points) in data]  # TODO should be optional
+        #print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
     data = [fitsize(img, gl, w, h, gl_type=goldlabel_type) for (img, gl) in data]
     if goldlabel_type == GoldlabelTypes.text:
 
@@ -635,10 +642,17 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
     if goldlabel_type not in [vars(GoldlabelTypes)[x] for x in vars(GoldlabelTypes).keys() if not x.startswith("__")]:
         print("Dataloader.getData(", dir, ", ", dataset_loader, ", ", img_type, ", ", maxcount, "): invalid input, goldlabel_type should be ", GoldlabelTypes)
         return None
-    words_per_line = [7, 8, 9]
-    lines_per_paragrph = [3, 4]
+    # <should_be_parameters_buts_its_more_convenient_to_have_them_here> convenient
+    words_per_line = [2, 3]  # number of words per line
+    lines_per_paragrph = [5, 6, 7]  # number of lines per paragraph
 
-    max_chars_per_line = 128
+    word_distance = [10, 20]  # padding added left of each word
+    line_distance = [5, 10]  # padding added upward of each line
+
+    downscaling = (6, 4)  # picture and gl get downscaled by on (height, width)
+
+    max_chars_per_line = 64  # TODO enforce this limit when building lines
+    # </should_be_parameters_buts_its_more_convenient_to_have_them_here>
 
     if dataset_loader == DatasetNames.iam:
         data = load_iam(dir, goldlabel_type)  # [(relative path of img file, goldlabel text of that file)]
@@ -667,15 +681,14 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
         if goldlabel_type == GoldlabelTypes.linepositions:
             ys = 1
         elif goldlabel_type == GoldlabelTypes.text:
-            ys = 32  # max([len(d[1]) for d in data])
+            ys = x_size[1]//4  # //4 weil konstante in Models.simpleHTR # max([len(d[1]) for d in data])
         else:
             ys = 1
-        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys, downsample=downscaling)
         print("imgwordenc_gl: ", getType(data))
         return data
 
     tmp = [data[i:i+random.choice(words_per_line)] for i in range(0, len(data), max(words_per_line))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
-    word_distance = [10, 20]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random.choice(word_distance) for unused in range(len(t))]) for t in tmp]
     data = [rotate_img(img, lp, goldlabel_type, angle=random.randrange(-line_para_winkel[0], line_para_winkel[0]+1, 1)) for (img, lp) in data]
     #print("data_lines[0]: ", data[0])
@@ -688,13 +701,12 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
             ys = max_chars_per_line  # max([len(d[1]) for d in data])
         else:
             ys = 1
-        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys, downsample=downscaling)
         print("imglineenc_gl: ", getType(data))
         return data
     # rotate lines
 
     tmp = [data[i:i+random.choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
-    line_distance = [5, 10]
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random.choice(line_distance) for unused in range(len(t))]) for t in tmp]
     data = [rotate_img(img, lp, goldlabel_type, angle=random.randrange(-line_para_winkel[1], line_para_winkel[1]+1, 1)) for (img, lp) in data]
     #print("imgpara_gl: ", getType(data))
@@ -707,7 +719,7 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
             ys = max_chars_per_line*max(lines_per_paragrph)  # max([len(d[1]) for d in data])
         else:
             ys = 1
-        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys, downsample=downscaling)
         #print("imgparaenc_gl: ", getType(data))
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
@@ -852,10 +864,10 @@ class Dataset(abstractDataset):
 
     @classmethod
     def htr(cls):
-        return cls(gl_encoding=GoldlabelEncodings.onehot, gl_type=GoldlabelTypes.text, img_type=ImgTypes.line, img_size=(128, 2048), line_para_winkel=(3, 0), flip=True)
+        return cls(gl_encoding=GoldlabelEncodings.onehot, gl_type=GoldlabelTypes.text, img_type=ImgTypes.line, img_size=(32, 256), line_para_winkel=(3, 0), flip=False)
     @classmethod
     def linefinder(cls):
-        return cls(gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(128*5, 2048), line_para_winkel=(3, 8))
+        return cls(gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(256, 256), line_para_winkel=(3, 8))
 
 
     def __init__(self, datadir=data_dir, gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(32, 32), line_para_winkel=(0, 0), flip=False):

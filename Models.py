@@ -131,13 +131,14 @@ def vgg11(in_shape, out_length, activation="linear"):
 # erst conv und averagePooling, dann dense
 #
 # filter anzahl/größer machen
-def conv(in_shape=(32, 32, 1), out_length=6, activation='linear'):
+def conv(in_shape=(32, 32), out_length=6, activation='linear'):
     # trainable parameters 23,316
     model = tf.keras.models.Sequential(name="conv")
 
     # Layer 1 Conv2D
     # model.add(Dropout(0.2, input_shape=input_shape))
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # rescale img to [0, 1]
+    model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
     #model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # rescale img to [-1, 1]
     model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", activation='tanh', input_shape=in_shape))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
@@ -174,10 +175,15 @@ def conv(in_shape=(32, 32, 1), out_length=6, activation='linear'):
     return model
 
 
-def simpleHTR(in_shape=(32, 128, 1), out_length=27, activation='relu'):
-    # TODO input shape von word auf line ändern
+def simpleHTR(in_shape=(32, 128), out_length=len(Dataloader.alphabet), activation='relu'):
+    """
+    :param in_shape:
+    :param out_length:
+    :param activation:
+    :return:
+    model with shapes in_shape -> (in_shape[1]//2, out_length)
+    """
     # TODO neues Modell: wie simpleHTR, aber bild und ausgabe vom linefinder als eingabe
-    # Eingabe auf ganzen Bild+Linepoint ändern.
     assert in_shape[0] == 32
     # should be the same as simpleHTR, but migrated to tensorflow2
     # https://towardsdatascience.com/build-a-handwritten-text-recognition-system-using-tensorflow-2326a3487cd5
@@ -185,6 +191,7 @@ def simpleHTR(in_shape=(32, 128, 1), out_length=27, activation='relu'):
 
     model = tf.keras.models.Sequential(name="simpleHTR")
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # rescale img to [0, 1]
+    model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
     #model.add(tf.expand_dims(input=in_shape, axis=3))
 
     # setup_cnn
@@ -210,19 +217,19 @@ def simpleHTR(in_shape=(32, 128, 1), out_length=27, activation='relu'):
     #current tensor size: (None, 32, 1, 256)
 
     """setup_rnn"""
-    model.add(tf.keras.layers.Reshape((32, 256)))
+    model.add(tf.keras.layers.Reshape((in_shape[1]//4, 256)))
     #current tensor size: (None, 32, 256)
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True)))  # maybe not exactly the same as original simpleHTR
     model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True)))
     #current tensor size: (None, 32, 512)
     # BxTxH + BxTxH -> BxTx2H -> BxTx1X2H
-    model.add(tf.keras.layers.Reshape((32, 1, 512)))
+    model.add(tf.keras.layers.Reshape((in_shape[1]//4, 1, 512)))
     #current tensor size: (None, 1, 32, 1, 512)
 
     # project output to chars (including blank): BxTx1x2H -> BxTx1xC -> BxTxC
     model.add(tf.keras.layers.Conv2D(kernel_size=(1, 1), filters=out_length,  padding='SAME', strides=(1, 1), dilation_rate=(2, 2)))
     #current tensor size: (None, 32, 1, 10)
-    model.add(tf.keras.layers.Reshape((32, out_length)))
+    model.add(tf.keras.layers.Reshape((in_shape[1]//4, out_length)))
     #current tensor size: (None, 32, 10), should be (batch_size, timestemps==maxlength_of_output_text, sparse char encoding)
 
 
@@ -259,10 +266,10 @@ def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), act
     """
     # copied from https://github.com/UniDuEChristianGold/LineRecognition
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
-    input_data = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
+    cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
     # ====================== Conv 0 ======================
 
-    cnn = tf.keras.layers.Conv2D(filters=16, kernel_size=(9, 9), strides=(1, 1), padding="same")(input_data)
+    cnn = tf.keras.layers.Conv2D(filters=16, kernel_size=(9, 9), strides=(1, 1), padding="same")(cnn)
 
     cnn = tf.keras.layers.BatchNormalization()(cnn)
     cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
