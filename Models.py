@@ -1,4 +1,5 @@
 import keras.losses
+import numpy as np
 import tensorflow as tf
 
 import Dataloader
@@ -175,7 +176,7 @@ def conv(in_shape=(32, 32), out_length=6, activation='linear'):
     return model
 
 
-def simpleHTR(in_shape=(32, 128), out_length=len(Dataloader.alphabet), activation='relu'):
+def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation='relu'):
     """
     :param in_shape:
     :param out_length:
@@ -358,15 +359,153 @@ class linepoint2lineimg(tf.keras.layers.Layer):
     name = "linepoint2lineimg"
 
     def __init__(self, img_shape):
-        super().__init__()
+        super().__init__(dynamic=True, trainable=False)
         print("Models.linepoint2lineimg: init(", img_shape, ")")
         self.imgshape = img_shape
 
-    def build(self, input_shape):
-        print("Models.linepoint2lineimg: build(", input_shape, ")")
+    def build(self, batch_input_shape):
+        print("Models.linepoint2lineimg: build(", batch_input_shape, ")")
+
+    def compute_output_shape(self, unknwon):
+        print("Models.linepoint2lineimg.compute_output_shape: unknwon = ", unknwon)
+        numlines = 7
+        return (None, numlines, 32, 256)
 
     def call(self, linepoints, image):
-        print("Models.linepoint2lineimg: call(", linepoints, ", ", image, ")")
-        linepoints = Dataloader.dense2linepoints(linepoints, max_x=self.imgshape[0], max_y=self.imgshape[1])
-        return [Dataloader.extractline(image, lp, max_x=self.imgshape[0], max_y=self.imgshape[1]) for lp in linepoints]
+        print("Models.linepoint2lineimg: call(", Dataloader.getType(linepoints), ", ", Dataloader.getType(image), ")")
+        #linepoints = Dataloader.dense2linepoints(linepoints, max_x=self.imgshape[0], max_y=self.imgshape[1])
+        #assert linepoints.shape[1]%5 == 0
+        #max_x = self.imgshape[0]
+        #max_y = self.imgshape[1]
+        #linepoints = [((int(linepoints[i]*max_x), int(linepoints[i+1]*max_y)), (int(linepoints[i+2]*max_x), int(linepoints[i+3]*max_y)), int(linepoints[i+4]*max_y)) for i in range(0, linepoints.shape[1], 5)]
+        #print("linepoints = ", linepoints)
+        #linepoints = [((int(linepoints[i]*max_x), int(linepoints[i+1]*max_y)), (int(linepoints[i+2]*max_x), int(linepoints[i+3]*max_y)), max(1, int(linepoints[i+4]*max_y))) for i in range(0, linepoints.shape[1], 5)]
+        #TODO extracline is not supported:  OperatorNotAllowedInGraphError: using a `tf.Tensor` as a Python `bool` is not allowed: AutoGraph did convert this function. This might indicate you are trying to use an unsupported feature.
+        return [image[:][0:32][0:256] for i in range(7)]
+        #return [Dataloader.extractline(image, linepoints[i:5*i], max_x=self.imgshape[0], max_y=self.imgshape[1]) for i in range(linepoints.shape[1]//5)]
 
+
+def test_multioutput():
+    # train on np.array((batch_size, input_size)) -> {name_of_output_layer: np.array((batch_size, output_size)), ...}
+    input_data = tf.keras.layers.Input(name="input", shape=(2, 2))
+    #output_data = [tf.keras.layers.Flatten()(input_data) for _ in range(1)]
+    output_data = tf.keras.layers.Flatten()(input_data)
+    output_data1 = tf.keras.layers.Dense(units=2, name="output_for_line_1")(output_data)
+    output_data2 = tf.keras.layers.Dense(units=2, name="output_for_line_2")(output_data)
+
+    model = keras.Model(inputs=input_data, outputs=[output_data1, output_data2], name="test_multioutput")
+    opt = tf.keras.optimizers.Adam(learning_rate=2**-8, beta_1=0.5)
+    loss = {"output_for_line_1": keras.losses.MeanSquaredError(), "output_for_line_2": keras.losses.MeanSquaredError()}
+    model.compile(loss=loss, optimizer=opt)
+    return model
+
+
+def linefinder(in_shape=(256, 256), output_shape=(2, 32, 256), activation='relu'):
+    """
+    :param input_shape:
+    shape of paragrph image. all values should be powers of 2
+    :param output_shape:
+    (number of lines, shape of lineimg[0], shape of lineimg[1])
+    all values exept number of lines should be powers of 2
+    :return:
+    """
+    # image of paragraph -> [image of line]
+    input_data = tf.keras.layers.Input(name="input", shape=in_shape)
+    cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(input_data)
+    current_shape = cnn.get_shape()
+    while current_shape[1] != output_shape[1] or current_shape[2] != output_shape[2]:
+        print("current shape = ", current_shape)
+        poolsize = (1, 1)
+        if current_shape[1] > output_shape[1]:
+            poolsize = (2, 1)
+        if current_shape[2] > output_shape[2]:
+            poolsize = (poolsize[0], 2)
+        cnn = tf.keras.layers.Dropout(rate=0.2)(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=output_shape[0], kernel_size=(5, 5), strides=(1, 1), padding="same")(cnn)
+
+        cnn = tf.keras.layers.BatchNormalization()(cnn)
+        cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
+        cnn = tf.keras.layers.MaxPooling2D(pool_size=poolsize, strides=poolsize, padding="valid")(cnn)
+        current_shape = cnn.get_shape()
+
+    #flat = tf.keras.layers.Flatten()(cnn)
+    #outputs = [tf.keras.layers.Dense(units=output_shape[1]*output_shape[2], activation=activation, name="line"+str(i))(flat) for i in range(output_shape[0])]
+
+    reshaped = tf.keras.layers.Reshape((output_shape[0], output_shape[1], output_shape[2], 1))(cnn)
+    outputs = [tf.keras.layers.Conv2D(filters=1, kernel_size=(9, 9), strides=(1, 1), padding="same", activation=activation, name="line"+str(i))(reshaped[:,i,:,:]) for i in range(output_shape[0])]
+
+    losses = {}
+    for i in range(output_shape[0]):
+        losses["line"+str(i)] = keras.losses.MeanSquaredError()
+    model = keras.Model(inputs=input_data, outputs=outputs, name="linefinder_model")
+    opt = tf.keras.optimizers.Adam(learning_rate=2**-8, beta_1=0.5)
+    model.compile(loss=losses, optimizer=opt)
+    return model
+
+class customlayer(tf.keras.layers.Layer):
+
+    def __init__(self, name):
+        print("Models.customlayer: name = ", name)
+        super(customlayer, self).__init__(name=name)
+        self.out_size = (32, 64)
+
+    def build(self, batch_input_shape):
+        print("Models.customlayer: build(", batch_input_shape, ")")
+
+    def compute_output_shape(self, unknwon):
+        return self.out_size
+
+    def call(self, img, pos):
+        """
+        :param img:
+        tf.tensor(shape=(x, y))
+        the paragraph image
+        :param pos:
+        tf.tensor(shape(2))
+        the upper left corner of the line
+        :return:
+        the slice of image that contions line
+        """
+        print("Models.customlayer: call img=", Dataloader.getType(img)+", pos=", Dataloader.getType(pos))
+        bi = 0
+        # pos[bi][0] has to be int, but casting it to int leads to "ValueError: No gradients provided"
+        #pos = tf.cast(pos, dtype=tf.int32)
+        r = np.zeros((32, 256))
+        for i in range(len(r)):
+            for j in range(len(r[i])):
+                r[i][j] = 0
+                for ii in range(img.shape[0]):
+                    for ij in range(img.shape[1]):
+                        weigth = 1/(abs(i+pos[0]-ii)**2+abs(j+pos[1]-ij)**2)  # weight = 1/distance of requested pixel with (ii, ij)
+                        r[i][j] += weigth*img[ii][ij]
+        #return tf.slice(img, begin=(0, pos[bi][0], pos[bi][1]), size=(-1, self.out_size[0], self.out_size[1]))
+        return r
+
+
+def total(in_shape, linefindermodel, linereadermodel, out_shape=len(Dataloader.alphabet)):
+    input_data = tf.keras.layers.Input(name="input", shape=in_shape)
+    lineimgs = linefindermodel(input_data)
+    texts = [linereadermodel(lineimg) for lineimg in lineimgs]
+    output = tf.keras.layers.Concatenate(axis=1)(texts)
+    model = keras.Model(inputs=input_data, outputs=output, name="total")
+    opt = tf.keras.optimizers.Adam(learning_rate=2**-8, beta_1=0.5)  # what even is beta_1 of Adam?
+    model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)
+    return model
+
+# maybe use model_conv[-2].outputs as inputs to attention
+def oldtotal(in_shape=(256, 256), out_length=6, activation='linear'):
+    input_data = tf.keras.layers.Input(name="input", shape=in_shape)
+    linepoints = conv(in_shape=in_shape, out_length=out_length, activation=activation)(input_data)
+    lineimgs = customlayer(name="mycustomlayer")(input_data, linepoints)
+    #lineimgs = linepoint2lineimg(img_shape=(32, 256))(linepoints, input_data)
+    print("Models.total: lineimgs = ", Dataloader.getType(lineimgs))
+    # lineimgs = [32x256 image of first line, 32x256 image of second line, ...]
+    #lineimgs = [tf.keras.layers.Attention()([linepoints[i*5:(i+1)*5], input_data]) for i in range(out_length)]  # outputshape is the same as linepoints[i*5:(i+1)*5]
+    #simplehtrmode_as_layer = simpleHTR(in_shape=(32, 256))
+    #lines = [simplehtrmode_as_layer(lineimg) for lineimg in lineimgs]
+    model = keras.Model(inputs=input_data, outputs=lineimgs, name="simpleHTR2")
+    opt = tf.keras.optimizers.Adam(learning_rate=2**-8, beta_1=0.5)
+    model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)
+    return model
+
+# https://www.tensorflow.org/tutorials/generative/pix2pix

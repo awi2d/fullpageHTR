@@ -45,7 +45,11 @@ def show_trainhistory(history, name="unnamed model"):
     saves a picture of the history in the models_dir
     """
     assert len(history["loss"]) == len(history["val_loss"]) == len(history["lr"])
-    import matplotlib.pyplot as ploter  # TODO import should be at start of file
+    try:
+        import matplotlib.pyplot as ploter  # TODO import should be at start of file
+    except:
+        print("Matplotlib is not installed, cant execute show_trainhistory")
+        return None
     # copied from https://stackoverflow.com/questions/9103166/multiple-axis-in-matplotlib-with-different-scales, second answer
     # Create figure and subplot manually
     # fig = plt.figure()
@@ -96,7 +100,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 1024  # führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+    batch_size = 128  # führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -108,8 +112,7 @@ def train(model, saveName, dataset, val, start_lr=2**(-8)):
         mode='auto', baseline=None, restore_best_weights=True
     )
     lr = start_lr
-    lr_mult = [0.5, 1,
-               2]  # at every step: train with all [lr*m for m in lr_mult] learning rates, pick the weights and lr that has the best validation_loss
+    lr_mult = [0.5, 1, 2]  # at every step: train with all [lr*m for m in lr_mult] learning rates, pick the weights and lr that has the best validation_loss
     print("learning rate: ", end=' ')
     history = {"loss": [], "val_loss": [], "lr": []}
     old_lr = -1
@@ -276,17 +279,19 @@ if __name__ == "__main__":
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
     print("start")
-    # train simpleHTR
+
+    model_linefinder = Models.linefinder(in_shape=(256, 256), output_shape=(7, 32, 256))
+    ds_lineimg = Dataloader.img2lineimgDataset()
+    train(model_linefinder, saveName="linefinder", dataset=ds_lineimg, val=ds_lineimg.get_batch(64))
+    del ds_lineimg
+    model_htr = Models.simpleHTR(in_shape=(32, 256))
     ds_htr = Dataloader.Dataset.htr()
-    #ds_htr.show(ds_htr.get_batch(10))
-    model_sHTR = Models.simpleHTR(in_shape=ds_htr.imgsize)
-    train(model_sHTR, "simpleHTR", ds_htr, ds_htr.get_batch(64))
+    train(model_htr, saveName="htr", dataset=ds_htr, val=ds_htr.get_batch(64))
     del ds_htr
-    del model_sHTR
-    ds_linefinder = Dataloader.Dataset.linefinder()
-    #ds_linefinder.show(ds_linefinder.get_batch(10))
-    model_conv = Models.conv(in_shape=(ds_linefinder.imgsize[0], ds_linefinder.imgsize[1], 1), out_length=35)
-    train(model_conv, "conv", ds_linefinder, ds_linefinder.get_batch(64))
+    ds = Dataloader.Dataset.total()
+    model_total = Models.total(in_shape=(256, 256), linefindermodel=model_linefinder, linereadermodel=model_htr)
+    model_total.summary()
+    train(model_total, saveName="total", dataset=ds, val=ds.get_batch(64))
     exit(0)
     #names = ["real_convhard_sigmoid_mse_lr8", "real_convswish_mse_lr8", "real_cvfflinear_mse_lr8", "real_vgg11hard_sigmoid_mse_lr8"]  # scheinen zu funktionieren
     #for n in names:

@@ -17,9 +17,14 @@ models_dir = data_dir + "models/"  # directoy for storing trained models
 
 
 class GoldlabelTypes:
-    text = 0
-    linepositions = 1
-    number_of_lines = 2
+    text = 0  # str the text that is written in the image, e.g. "A move to Stop mr. "
+    linepositions = 1  # (start_of_line:(x:int, y:int), end_of_line:(x2:int, y2:int), height_of_line:int) all information needed to manually segment the line out of the image
+    number_of_lines = 2  # int
+    #add new type: linemask: [image where exactly the pixels of line i are 1, everything else 0 for i in range(max(lines_per_paragrph))]
+    # attention layer maybe supports masking
+    # masking may only support RNN and only one bool per timestamp https://www.tensorflow.org/guide/keras/custom_layers_and_models
+    # image segmentation (NN that predicts label for each pixel) https://www.tensorflow.org/tutorials/images/segmentation
+    lineimg = 4  # list of all textlines, each with the same size (32x256), only supports dense encoding
 
 
 class GoldlabelEncodings:
@@ -37,28 +42,7 @@ class DatasetNames:
     iam = 0
 
 
-def downscale(img, goldlabel: [line_point], x: int, y: int, gl_type=GoldlabelTypes.linepositions):
-    """
-    reduces the resolution of the image
-    :param img:
-    an opencv-img, that means numpy-array
-    :param goldlabel:
-    the goldlabel of image, unencoded
-    :param gl_type:
-    the type of the goldlabel, as defined in Dataloader.GoldlabelType
-    :param x:
-    the factor by witch the width of the image is scaled
-    :param y:
-    the factor by witch the hight of the image is scaled
-    :return:
-    an image of size (input_size[0]/x, input_size[1]/y)
-    """
-    img = cv2.resize(img, dsize=None, fx=1/x, fy=1/y)
-    if gl_type==GoldlabelTypes.linepositions:
-        goldlabel = [((int(x1/x), int(y1/y)), (int(x2/x), int(y2/y)), int(h/y)) for ((x1, y1), (x2, y2), h) in goldlabel]
-    return np.array(img, dtype="uint8"), goldlabel
-
-
+@tf.function
 def extractline(img, linepoint: [float], max_x: int, max_y: int):
     """
     :param img:
@@ -109,6 +93,7 @@ def extractline(img, linepoint: [float], max_x: int, max_y: int):
 
 
 def getType(x):
+    deliminating_chars = {"list": ('[', ';', ']'), "tupel": ('<', ';', '>'), "dict": ('{', ';', '}')}
     name = type(x).__name__
     if name == 'list':
         return '['+str(len(x))+":"+getType(x[0])+']'  # assumes all element of the list have the same type
@@ -117,10 +102,19 @@ def getType(x):
         for i in x:
             r += getType(i)+'; '
         return r[:-2] + '>'
+    if name == 'dict':
+        r = "{"+str(len(x.keys()))+":"
+        for key in x.keys():
+            r += getType(key)+": "+getType(x[key])+"; "  # would be more in line with other types
+            #r += str(key)+": "+getType(x[key])+"; "  # contains more information
+        r = r[:-1]+" }"
+        return r
     if name == 'ndarray':
-        return 'ndarray('+str(x.shape)+': '+(getType(x[0]) if len(x) > 0 else "Nix")+')'
+        return 'ndarray('+str(x.shape)+': '+(str(x.dtype) if len(x) > 0 else "Nix")+')'
     if name == 'BatchDataset':
         return str(name)+" : "+str(len(x))
+    if name in ["KerasTensor", "Tensor", "EagerTensor"]:
+        return str(name)+"("+str(x.shape)+":"+str(x.dtype)+")"
     return name
 
 
@@ -159,64 +153,6 @@ def apply_rotmat(rotmat, point):
     (x, y) = point
     return a00*x+a01*y+b0, a10*x+a11*y+b1
 
-def rotate_img(image, gl, gl_type, angle):
-    """
-    :param image:
-    an opencv-image
-    :param gl:
-    goldlabel in unencoded form
-    :param gl_type:
-    type of gl. if linepoint, the points will be transformed the same way as the image.
-    otherwise gl will stay the same
-    :param angle:
-    the angle in degrees by witch the image gets rotated.
-    Positive values mean counter-clockwise rotation
-    :return:
-    the image, but rotated and scaled down so the complete image fits in the same shape
-    """
-    #copied from https://pyimagesearch.com/2017/01/02/rotate-images-correctly-with-opencv-and-python/
-    # grab the dimensions of the image and then determine the
-    # center
-    (h, w) = image.shape[:2]
-    (cX, cY) = (w // 2, h // 2)
-    # grab the rotation matrix (applying the negative of the
-    # angle to rotate clockwise), then grab the sine and cosine
-    # (i.e., the rotation components of the matrix)
-    sin = abs(np.sin(angle*(2*np.pi/360)))
-    cos = abs(np.cos(angle*(2*np.pi/360)))
-    nW = int((h * sin) + (w * cos))
-    nH = int((h * cos) + (w * sin))
-    #print("Dataloader.rotate_img: (w, h) = ", (w, h))
-    #print("Dataloader.rotate_img: (sin, cos) = ", (sin, cos))
-    #print("Dataloader.rotate_img: (nW, nH) = ", (nW, nH))
-    M = cv2.getRotationMatrix2D((cX, cY), angle, 1)
-    # compute the new bounding dimensions of the image
-
-    # adjust the rotation matrix to take into account translation
-    M[0, 2] += (nW / 2) - cX
-    M[1, 2] += (nH / 2) - cY
-    # perform the actual rotation and return the image
-    image = cv2.warpAffine(image, M, (nW, nH), borderMode=cv2.BORDER_CONSTANT, borderValue=255)
-
-    #update the goldlabel
-    if gl_type == GoldlabelTypes.linepositions:
-        #print("Dataloader.rotate_img: gl = ", gl)
-        gl = [(apply_rotmat(M, (x1, y1)), apply_rotmat(M, (x2, y2)), h) for ((x1, y1), (x2, y2), h) in gl]
-        #gl = [(np.multiply(apply_rotmat(M, (x1, y1)), scale), np.multiply(apply_rotmat(M, (x2, y2)), scale), h*scale) for ((x1, y1), (x2, y2), h) in gl]
-        #print("Dataloader.rotate_img: gl = ", gl)
-        gl = [((int(x1), int(y1)), (int(x2), int(y2)), int(h)) for ((x1, y1), (x2, y2), h) in gl]
-    elif gl_type == GoldlabelTypes.text:
-        gl = gl
-    elif gl_type == GoldlabelTypes.number_of_lines:
-        gl = gl
-    else:
-        print("Dataloader.rotate_img: TODO unsupported goldlabel_type in Dataloader.rotate_img: ", gl_type)
-        gl = "TODO"
-    # rescale image to have original size
-    scale = min(nW/w, nH/h)
-    image, gl = downscale(image, gl, x=scale, y=scale, gl_type=gl_type)
-    return image, gl
-
 
 def load_img(filename):
     """
@@ -249,7 +185,7 @@ def dense2points(points: [float], max_x=32, max_y=32) -> [(int, int)]:
     return [(int(points[2*i]*max_x), int(points[2*i+1]*max_x)) for i in range(int(len(points)/2))]
 
 
-alphabet = np.array([""]+list(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!"))
+alphabet = np.array([""]+list(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!#"))
 def txt2sparse(txt, y_size):
     #print("Dataloader.txt2sparse: txt ", len(txt), ", ysize ", y_size)
     assert len(txt) <= y_size
@@ -333,7 +269,7 @@ def dense2linepoints(points: [float], max_x: int, max_y: int) -> [line_point]:
     return [((int(points[i]*max_x), int(points[i+1]*max_y)), (int(points[i+2]*max_x), int(points[i+3]*max_y)), max(1, int(points[i+4]*max_y))) for i in range(0, len(points), 5)]
 
 
-def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), sampesize: (int, int)):
+def fitsize_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), sampesize: (int, int)):
     """
     cuts an area out of the image.
     currently only used in fitsize
@@ -366,7 +302,34 @@ def sample_linepoint(img, goldlabel: [line_point], upperleftcorner: (int, int), 
         glr = [((0, 0), (0, 0), 0)]
     return np.array(img[uly:dry, ulx:drx], dtype="uint8"), glr
 
-def fitsize(img, gl, w, h, gl_type=GoldlabelTypes.linepositions):
+def downscale(img, goldlabel, x: int, y: int, gl_type=GoldlabelTypes):
+    """
+    reduces the resolution of the image
+    :param img:
+    an opencv-img, that means numpy-array
+    :param goldlabel:
+    the goldlabel of image, unencoded
+    :param gl_type:
+    the type of the goldlabel, as defined in Dataloader.GoldlabelType
+    :param x:
+    the factor by witch the width of the image is scaled
+    :param y:
+    the factor by witch the hight of the image is scaled
+    :return:
+    an image of size (input_size[0]/x, input_size[1]/y)
+    """
+    img = cv2.resize(img, dsize=None, fx=1/x, fy=1/y)
+    # postsize[0] = 1/y*praesize[0]
+    # postsize[1] = 1/x*praesize[1]
+    if gl_type == GoldlabelTypes.linepositions:
+        goldlabel = [((int(x1/x), int(y1/y)), (int(x2/x), int(y2/y)), int(h/y)) for ((x1, y1), (x2, y2), h) in goldlabel]
+    elif gl_type == GoldlabelTypes.lineimg:
+        #print("Dataloader.downscale: goldlabel = ", getType(goldlabel))
+        goldlabel = [cv2.resize(np.array(gl), dsize=None, fx=1/x, fy=1/y) for gl in goldlabel]
+    return np.array(img, dtype="uint8"), goldlabel
+
+
+def fitsize(img, gl, w, h, gl_type):
     """
     :param img:
     :param gl:
@@ -382,20 +345,26 @@ def fitsize(img, gl, w, h, gl_type=GoldlabelTypes.linepositions):
     #print("Dataloader.fitsiz: (h, w) = ", (h, w))
     if gl_type == GoldlabelTypes.linepositions:
         if img.shape[0] >= h:
-            img, gl = sample_linepoint(img, gl, (0, 0), (img.shape[0], h-1))
+            img, gl = fitsize_linepoint(img, gl, (0, 0), (img.shape[0], h-1))
         if img.shape[1] >= w:
-            img, gl = sample_linepoint(img, gl, (0, 0), (w-1, img.shape[1]))
+            img, gl = fitsize_linepoint(img, gl, (0, 0), (w-1, img.shape[1]))
     elif gl_type == GoldlabelTypes.text:
         img = np.array(img[0:h, 0:w], dtype="uint8")  # TODO text that is cutted out of the image should be cut out of the goldlabel
+    elif gl_type == GoldlabelTypes.lineimg:
+        img = np.array(img[0:h, 0:w])
+        gl = [np.array(glimg[0:32, 0:256]) for glimg in gl]  # TODO size of lineimg should not be hardcoded
+        #print("Dataloader.fitsize: gl shape: ", [glimg.shape for glimg in gl])
+        gl = [np.pad(glimg, ((0, 32-glimg.shape[0]), (0, 256-glimg.shape[1])), mode='constant', constant_values=255) for glimg in gl]
     else:
-        return "TODO"
+        print("Invalid goldlabelencoding in Dataloader.fitsize: "+str(gl_type))
+        raise "Invalid goldlabelencoding in Dataloader.fitsize: "+str(gl_type)
     img = np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255)
     #print("fitsize: (h, w) = ", (h, w), "shape = ", img.shape)
     assert img.shape == (h, w)
     return img, gl
 
 
-def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1, downsample=(2, 4)):
+def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1):
     """
     :param data:
     data of type [(image, goldlabel)]
@@ -406,27 +375,29 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
     encoding of goldlabel in Dataset.gl_encoding
     :param size:
     (width: int, height: int) or the other way round, size all images in data will have.
-    that means they either get padded are cliped.
+    that means they either get padded or downscaled and clipped.
     :param y_size:
     size all goldlabel_encodings in data will have
-    :param downsample:
-    before being padded or cliped to size, all images get downsampled by downsample[0] on the dim0-axis (hight) and downsample[1] on the dim1-axis (width)
     :return:
     [(image, goldlabel)] like input, but the goldlabel is encoded and image and goldlabel are padded to size
     """
 
-
-
-
-    data = [downscale(img, points, downsample[1], downsample[0], gl_type=goldlabel_type) for (img, points) in data]  # TODO should be optional
     if size is None:
         h = int(max([img.shape[0] for (img, gl) in data]))
         w = int(max([img.shape[1] for (img, gl) in data]))
-        #print("Dataloader.encode_and_pad: natural w, h = ", h, ", ", w)
+        #print("Dataloader.encode_and_pad: shape in w, h = ", h, ", ", w)
     else:
-        h = size[0]
-        w = size[1]
-        #print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
+        (h, w) = size
+        hn = int(max([img.shape[0] for (img, gl) in data]))
+        wn = int(max([img.shape[1] for (img, gl) in data]))
+        print("Dataloader.encode_and_pad: (hn, wn) = ", (hn, wn), " == ", (h, w), " = (h, w) = size")
+        data = [downscale(img, gl, y=img.shape[0]/h, x=img.shape[1]/w, gl_type=goldlabel_type) for (img, gl) in data]
+        # postsize[0] = 1/y*praesize[0]
+        # postsize[1] = 1/x*praesize[1]
+        hn = int(max([img.shape[0] for (img, gl) in data]))
+        wn = int(max([img.shape[1] for (img, gl) in data]))
+        print("Dataloader.encode_and_pad: (hn, wn) = ", (hn, wn), " == ", (h, w), " = (h, w) = size")
+    #print("Dataloader.encode_and_pad: used w, h = ", h, ", ", w)
     data = [fitsize(img, gl, w, h, gl_type=goldlabel_type) for (img, gl) in data]
     if goldlabel_type == GoldlabelTypes.text:
 
@@ -446,7 +417,6 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
         else:
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
     elif goldlabel_type == GoldlabelTypes.number_of_lines:
-        data = [fitsize(img, gl, w, h) for (img, gl) in data]
         maxlinecount = max([gl for (img, gl) in data])
         if goldlabel_encoding == GoldlabelEncodings.dense:
             return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), lc/maxlinecount) for (img, lc) in data]
@@ -454,6 +424,9 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=None, y_size=1
             return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), num2sparse(lc, maxlinecount)) for (img, lc) in data]
         else:
             raise "invalid goldlabel_encoding: "+str(goldlabel_encoding)
+    elif goldlabel_type == GoldlabelTypes.lineimg:
+        # does not support dense or onehot encoding
+        return [(np.pad(img, ((0, h-img.shape[0]), (0, w-img.shape[1])), mode='constant', constant_values=255), lineimgs) for (img, lineimgs) in data]
     else:
         raise "invalid goldlabel_type: "+str(goldlabel_type)
 
@@ -486,7 +459,7 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
         # np.pad(np-array, ((oben, unten), (links, rechts)
         img_list = [np.pad(img_list[i], ((pad[i], 0), (0, w-img_list[i].shape[1])), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at right margin
         if goldlabel_type == GoldlabelTypes.text:
-            goldlabel = '<br>'.join(goldlabel_list)
+            goldlabel = ''.join(goldlabel_list)
         elif goldlabel_type == GoldlabelTypes.linepositions:
             goldlabel = [((0, 0), (0, 0), 0)]*len(goldlabel_list)
             offset = 0
@@ -496,13 +469,16 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
                 goldlabel[i_gl] = ((pre_gl[0][0], pre_gl[0][1]+offset), (pre_gl[1][0], pre_gl[1][1]+offset), pre_gl[2])
                 #offset += pad[i_gl]+pre_gl[2]
                 offset += img_list[i_gl].shape[0]
+        elif goldlabel_type == GoldlabelTypes.lineimg:
+            # axis == 0 -> bilder untereinander -> img_list is list of lineimg
+            goldlabel = goldlabel_list
         else:
             print("Dataloader.concat_data: goldlabel_type ", goldlabel_type, " is not valid")
     elif axis == 1:
         h = max([img.shape[0] for img in img_list])
         img_list = [np.pad(img_list[i], ((int(np.floor_divide((h-img_list[i].shape[0]),2)), int(np.ceil((h-img_list[i].shape[0])/2))), (pad[i], 0)), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
         if goldlabel_type == GoldlabelTypes.text:
-            goldlabel = ' '.join(goldlabel_list)
+            goldlabel = ' '.join(goldlabel_list)+"#"  # # is end-of-line-symbol
         elif goldlabel_type == GoldlabelTypes.linepositions:
             # line start at start point of first word, ends at endpoint of last word + sum(width every other word), and has the hight of maxium height of each word.
             # goldlabel = [((x1, y1), (x2, y2), h)]
@@ -515,6 +491,14 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
             widths = [abs(point[0][1][0]-point[0][0][0]) for point in goldlabel_list]
             endpoint = (startpoint[0]+sum(widths)+sum(pad), endpoint[1])
             goldlabel = [(startpoint, endpoint, hight)]
+        elif goldlabel_type == GoldlabelTypes.lineimg:
+            #print("Dataloader.concat_data: gl_list shapes = ", [gl.shape for gl in goldlabel_list])
+            mh = max([gl.shape[0] for gl in goldlabel_list])
+            #print("Dataloader.concat_data: gl_list shapes = ", [gl.shape for gl in goldlabel_list])
+            goldlabel_list = [np.pad(gl, ((0, mh-gl.shape[0]), (0, 0)), mode='constant', constant_values=255) for gl in goldlabel_list]
+            #print("Dataloader.concat_data: gl_list = ", getType(goldlabel_list))
+            #print("Dataloader.concat_data: gl_list = ", [gl.shape for gl in goldlabel_list])
+            goldlabel = np.concatenate(goldlabel_list, axis=1)
         else:
             print("Dataloader.concat_data: goldlabel_type ", goldlabel_type, " is not valid")
     else:
@@ -572,6 +556,8 @@ def load_iam(datadir=iam_dir, goldlabel_type=GoldlabelTypes.linepositions):
                 goldlabel = [((0, int(0.5*hight)), (width, int(0.5*hight)), hight)]
             elif goldlabel_type == GoldlabelTypes.number_of_lines:
                 goldlabel = 1
+            elif goldlabel_type == GoldlabelTypes.lineimg:
+                goldlabel = None
             else:
                 goldlabel = "TODO: invalid goldlabel_type in Dataloader.load_iam: "+str(goldlabel_type)
             word_img_gt.append((img_filename, goldlabel))
@@ -596,29 +582,65 @@ def store(img_gl_data, dir=dataset_dir):
     return None
 
 
-
-def getTrainingData(goldlabel_encoding=GoldlabelEncodings.onehot):
+def rotate_img(image, gl, gl_type, angle):
     """
-    :param goldlabel_encoding:
-    from Dataset.goldlabel_encodings
+    :param image:
+    an opencv-image
+    :param gl:
+    goldlabel in unencoded form
+    :param gl_type:
+    type of gl. if linepoint, the points will be transformed the same way as the image.
+    otherwise gl will stay the same
+    :param angle:
+    the angle in degrees by witch the image gets rotated.
+    Positive values mean counter-clockwise rotation
     :return:
-    (x_train, y_train), (x_val, y_val), (x_test), (y_test), so that tf.model.fit(x_train, y_train, validation_data=(x_val, y_val)) works.
+    the image, but rotated and scaled down so the complete image fits in the same shape
     """
-    data = getData(dir=data_dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, goldlabel_type=GoldlabelTypes.linepositions, goldlabel_encoding=goldlabel_encoding, maxcount=100, x_size=(512, 1024))
-    train_val_split = int(0.8*len(data))  # 80% training, 10% validation, 10% test
-    val_test_split = int(0.9*len(data))
-    print("split: ", train_val_split, " : ", val_test_split, " : ", len(data))
-    data_train = data[:train_val_split]
-    data_val = data[train_val_split:val_test_split]
-    data_test = data[val_test_split:]
+    #copied from https://pyimagesearch.com/2017/01/02/rotate-images-correctly-with-opencv-and-python/
+    # grab the dimensions of the image and then determine the
+    # center
+    (h, w) = image.shape[:2]
+    (cX, cY) = (w // 2, h // 2)
+    # grab the rotation matrix (applying the negative of the
+    # angle to rotate clockwise), then grab the sine and cosine
+    # (i.e., the rotation components of the matrix)
+    sin = abs(np.sin(angle*(2*np.pi/360)))
+    cos = abs(np.cos(angle*(2*np.pi/360)))
+    nW = int((h * sin) + (w * cos))
+    nH = int((h * cos) + (w * sin))
+    #print("Dataloader.rotate_img: (w, h) = ", (w, h))
+    #print("Dataloader.rotate_img: (sin, cos) = ", (sin, cos))
+    #print("Dataloader.rotate_img: (nW, nH) = ", (nW, nH))
+    M = cv2.getRotationMatrix2D((cX, cY), angle, 1)
+    # compute the new bounding dimensions of the image
 
-    x_train = np.array([d[0] for d in data_train], dtype=float)
-    y_train = np.array([d[1] for d in data_train], dtype=float)
-    x_val = np.array([d[0] for d in data_val], dtype=float)
-    y_val = np.array([d[1] for d in data_val], dtype=float)
-    x_test = np.array([d[0] for d in data_test], dtype=float)
-    y_test = np.array([d[1] for d in data_test], dtype=float)
-    return (x_train, y_train), (x_val, y_val), (x_test, y_test)
+    # adjust the rotation matrix to take into account translation
+    M[0, 2] += (nW / 2) - cX
+    M[1, 2] += (nH / 2) - cY
+    # perform the actual rotation and return the image
+    image = cv2.warpAffine(image, M, (nW, nH), borderMode=cv2.BORDER_CONSTANT, borderValue=255)
+
+    #update the goldlabel
+    if gl_type == GoldlabelTypes.linepositions:
+        #print("Dataloader.rotate_img: gl = ", gl)
+        gl = [(apply_rotmat(M, (x1, y1)), apply_rotmat(M, (x2, y2)), h) for ((x1, y1), (x2, y2), h) in gl]
+        #gl = [(np.multiply(apply_rotmat(M, (x1, y1)), scale), np.multiply(apply_rotmat(M, (x2, y2)), scale), h*scale) for ((x1, y1), (x2, y2), h) in gl]
+        #print("Dataloader.rotate_img: gl = ", gl)
+        gl = [((int(x1), int(y1)), (int(x2), int(y2)), int(h)) for ((x1, y1), (x2, y2), h) in gl]
+    elif gl_type == GoldlabelTypes.text:
+        pass
+    elif gl_type == GoldlabelTypes.number_of_lines:
+        pass
+    elif gl_type == GoldlabelTypes.lineimg:
+        pass
+    else:
+        print("Dataloader.rotate_img: TODO unsupported goldlabel_type in Dataloader.rotate_img: ", gl_type)
+        pass
+    # rescale image to have original size
+    scale = min(nW/w, nH/h)
+    image, gl = downscale(image, gl, x=scale, y=scale, gl_type=gl_type)
+    return image, gl
 
 
 def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, goldlabel_type=GoldlabelTypes.text, goldlabel_encoding=GoldlabelEncodings.onehot, x_size = (100, 100), maxcount=-1, offset=0, line_para_winkel=(2, 5)):
@@ -642,14 +664,12 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
     if goldlabel_type not in [vars(GoldlabelTypes)[x] for x in vars(GoldlabelTypes).keys() if not x.startswith("__")]:
         print("Dataloader.getData(", dir, ", ", dataset_loader, ", ", img_type, ", ", maxcount, "): invalid input, goldlabel_type should be ", GoldlabelTypes)
         return None
-    # <should_be_parameters_buts_its_more_convenient_to_have_them_here> convenient
+    # <should_be_parameters_buts_its_more_convenient_to_have_them_here>
     words_per_line = [2, 3]  # number of words per line
     lines_per_paragrph = [5, 6, 7]  # number of lines per paragraph
 
     word_distance = [10, 20]  # padding added left of each word
     line_distance = [5, 10]  # padding added upward of each line
-
-    downscaling = (6, 4)  # picture and gl get downscaled by on (height, width)
 
     max_chars_per_line = 64  # TODO enforce this limit when building lines
     # </should_be_parameters_buts_its_more_convenient_to_have_them_here>
@@ -659,9 +679,9 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
     else:
         raise "invalid dataset_loader: "+str(dataset_loader)
     #print("path_gl: ", getType(data))
-    #print("data_imgpath_goldlabel = ", data[:5])
-    # if goldlabel_type = text: type(data) = [(img: np.array(?, ?), text: string)]
-    # if goldlabel_type = linepositions: type(data) = [(img: np.array(?, ?), [point: (int, int)])]
+    print("data_imgpath_goldlabel = ", data[:5])
+    # if goldlabel_type == text: type(data) = [(img: np.array(?, ?), text: string)]
+    # if goldlabel_type == linepositions: type(data) = [(img: np.array(?, ?), linepoint: [1:point: (int, int)])]
 
     if 0 < maxcount < len(data) and offset+maxcount < len(data):
         if img_type == ImgTypes.word:
@@ -674,26 +694,31 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
             print("unexpected img_type: ", img_type)
             return None
         data = data[offset:offset+maxcount]
-    #print("path_gl_short: ", getType(data))
+    print("path_gl_short: ", getType(data))
+    if goldlabel_type == GoldlabelTypes.lineimg:
+        data = [(path, load_img(dir+"/"+path)) for (path, gl) in data]
     data = [(load_img(dir+"/"+path), gl) for (path, gl) in data]
-    #print("imgword_gl: ", getType(data))
+    print("imgword_gl: ", getType(data))
     if img_type == ImgTypes.word:
         if goldlabel_type == GoldlabelTypes.linepositions:
             ys = 1
         elif goldlabel_type == GoldlabelTypes.text:
             ys = x_size[1]//4  # //4 weil konstante in Models.simpleHTR # max([len(d[1]) for d in data])
+        elif goldlabel_type == GoldlabelTypes.lineimg:
+            ys = (32, 256)  # should be a parameter or something
         else:
             ys = 1
-        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys, downsample=downscaling)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
         print("imgwordenc_gl: ", getType(data))
         return data
 
+    # data [(word-img, image of the same word)] still correct
     tmp = [data[i:i+random.choice(words_per_line)] for i in range(0, len(data), max(words_per_line))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
-    data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random.choice(word_distance) for unused in range(len(t))]) for t in tmp]
-    data = [rotate_img(img, lp, goldlabel_type, angle=random.randrange(-line_para_winkel[0], line_para_winkel[0]+1, 1)) for (img, lp) in data]
+    data = [concat_data(t, goldlabel_type=goldlabel_type, axis=1, pad=[random.choice(word_distance) for _ in range(len(t))]) for t in tmp]
+    data = [rotate_img(img, gl, goldlabel_type, angle=random.randrange(-line_para_winkel[0], line_para_winkel[0]+1, 1)) for (img, gl) in data]
     #print("data_lines[0]: ", data[0])
     #print("data_imgline_goldlabel = ", data[:5])
-    #print("imgline_gl: ", getType(data))
+    print("imgline_gl: ", getType(data))
     if img_type == ImgTypes.line:  # line
         if goldlabel_type == GoldlabelTypes.linepositions:
             ys = 1
@@ -701,15 +726,19 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
             ys = max_chars_per_line  # max([len(d[1]) for d in data])
         else:
             ys = 1
-        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys, downsample=downscaling)
+        #for (img, gl) in data:
+        #    cv2.imshow(str(gl), img)
+        #    cv2.waitKey(0)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
         print("imglineenc_gl: ", getType(data))
         return data
     # rotate lines
-
+    # still correct
     tmp = [data[i:i+random.choice(lines_per_paragrph)] for i in range(0, len(data), max(lines_per_paragrph))]  # tmp[0] = (list of words_per_line pictures, list of their goldlabels)
     data = [concat_data(t, goldlabel_type=goldlabel_type, axis=0, pad=[random.choice(line_distance) for unused in range(len(t))]) for t in tmp]
     data = [rotate_img(img, lp, goldlabel_type, angle=random.randrange(-line_para_winkel[1], line_para_winkel[1]+1, 1)) for (img, lp) in data]
-    #print("imgpara_gl: ", getType(data))
+    print("imgpara_gl: ", getType(data))
+    # still correct
     #print("data_parag[0]: ", data[0])
     #print("data_imgpara_goldlabel = ", data[:5])
     if img_type == ImgTypes.paragraph:  # paragraph
@@ -719,7 +748,8 @@ def getData(dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, g
             ys = max_chars_per_line*max(lines_per_paragrph)  # max([len(d[1]) for d in data])
         else:
             ys = 1
-        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys, downsample=downscaling)
+        data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, size=x_size, y_size=ys)
+        print("Dataloader.getData: encoded para: ", getType(data))
         #print("imgparaenc_gl: ", getType(data))
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
@@ -850,6 +880,46 @@ class RNNDataset(abstractDataset):
         for i in range(len(batch[0])):
             print(batch[0][i], "->", batch[1][i], "| ", predicted[i])
 
+class img2lineimgDataset(abstractDataset):
+    name = "img2lineimgDatset"
+    x = [[float]]
+    y = [[[float]]]
+
+    def __init__(self):
+        self.imgsize = (256, 256)
+        self.lineszie = (32, 256)
+
+    def get_batch(self, n: int) -> ([x], [y]):
+        # type(batch) = (x:(n, w, h), y:(max_linecount, n, linesize[0], linesize[1]))
+        data = getData(dir=data_dir, dataset_loader=DatasetNames.iam, img_type=ImgTypes.paragraph, goldlabel_type=GoldlabelTypes.lineimg, goldlabel_encoding=GoldlabelEncodings.dense, maxcount=n, line_para_winkel=(0, 0), x_size=self.imgsize)
+        x = []
+        y = [[] for _ in range(max([len(gl) for (img, gl) in data]))]
+        for (img, gl) in data:
+            x.append(img)
+            while len(gl) < len(y):
+                gl.append(np.zeros(self.lineszie))
+            for i in range(len(y)):
+                print("Dataloader.img2lineimgDataset: gl[i].shape = ", gl[i].shape)
+                y[i].append(gl[i])
+        return np.array(x), [np.array(yn) for yn in y]
+
+    def show(self, batch: ([x], [y]), predicted: [y] = None) -> None:
+        print("Dataloader.img2lineimgDataset: show ", getType(batch))
+        for i in range(len(batch[0])):
+            (img, gl) = (batch[0][i], [batch[1][line][i] for line in range(len(batch[1]))])
+            img = np.array(img, dtype="uint8")
+            gl = [np.array(li, dtype="uint8") for li in gl]
+            cv2.imshow("image: ", img)
+            for i in range(len(gl)):
+                cv2.imshow("lineimg:"+str(i), gl[i])
+            if predicted is not None:
+                for pred in predicted:
+                    pred = [np.array(p, dtype="uint8") for p in pred]
+                    for i in range(len(pred)):
+                        cv2.imshow("predlineimg:"+str(i), pred[i])
+            cv2.waitKey(0)
+
+
 class Dataset(abstractDataset):
     name = "real"
     data_directory = None
@@ -868,7 +938,9 @@ class Dataset(abstractDataset):
     @classmethod
     def linefinder(cls):
         return cls(gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(256, 256), line_para_winkel=(3, 8))
-
+    @classmethod
+    def total(cls):
+        return cls(gl_encoding=GoldlabelEncodings.onehot, gl_type=GoldlabelTypes.text, img_type=ImgTypes.paragraph, img_size=(256, 256), line_para_winkel=(3, 8))
 
     def __init__(self, datadir=data_dir, gl_encoding=GoldlabelEncodings.dense, gl_type=GoldlabelTypes.linepositions, img_type=ImgTypes.paragraph, img_size=(32, 32), line_para_winkel=(0, 0), flip=False):
         self.data_directory = datadir
