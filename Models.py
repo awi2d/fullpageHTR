@@ -1,6 +1,7 @@
 import keras.losses
 import numpy as np
 import tensorflow as tf
+import cv2
 
 import Dataloader
 
@@ -184,7 +185,6 @@ def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activatio
     :return:
     model with shapes in_shape -> (in_shape[1]//2, out_length)
     """
-    # TODO neues Modell: wie simpleHTR, aber bild und ausgabe vom linefinder als eingabe
     assert in_shape[0] == 32
     # should be the same as simpleHTR, but migrated to tensorflow2
     # https://towardsdatascience.com/build-a-handwritten-text-recognition-system-using-tensorflow-2326a3487cd5
@@ -256,6 +256,54 @@ def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activatio
     model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
+def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="relu"):
+    # same as simpleHTR2, but for arbitrary input shapes
+    input_data = tf.keras.layers.Input(name="input", shape=in_shape)
+    cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
+    cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(cnn)
+
+    # ====================== Conv n ======================
+
+    current_shape = cnn.get_shape()
+    desieredshape = (None, 1, 64, 128)  # 1 to be wegReshaped, 64 = number of chars in output, 128 = ?number of LSTM cells in bidirectional = number of filters
+    while current_shape[1] != desieredshape[1] or current_shape[2] != desieredshape[2]:
+        print("current shape = ", current_shape)
+        strides = (1, 1)
+        if current_shape[1] > desieredshape[1]:
+            strides = (2, 1)
+        if current_shape[2] > desieredshape[2]:
+            strides = (strides[0], 2)
+
+        cnn = tf.keras.layers.Conv2D(filters=128, kernel_size=(3, 3), strides=(1, 1), padding="same")(cnn)
+
+        cnn = tf.keras.layers.BatchNormalization()(cnn)
+        cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
+        cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
+        current_shape = cnn.get_shape()
+
+    # Shape: (batch, new_rows, new_cols, filters)
+    blstm = tf.keras.layers.Reshape((desieredshape[2], 128))(cnn)
+
+    # ====================== BLSTM 0 ======================
+
+    blstm = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=128, return_sequences=True))(blstm)
+    blstm = tf.keras.layers.Activation('relu')(blstm)
+
+    # ====================== BLSTM 1 ======================
+
+    blstm = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units=128, return_sequences=True))(blstm)
+    blstm = tf.keras.layers.Activation('relu')(blstm)
+    blstm = tf.keras.layers.Dropout(rate=0.5)(blstm)
+
+    # ====================== Dense 0 ======================
+
+    output_data = tf.keras.layers.Dense(units=out_length, activation="softmax")(blstm)
+
+    model = keras.Model(inputs=input_data, outputs=output_data, name="simpleHTR2")
+    opt = tf.keras.optimizers.Adam(learning_rate=0.0003, beta_1=0.5)
+    model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
+    return model
+
 
 def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), activation='relu', lr=3e-4):  # TODO add +1 to len(alphabet) ctc-blank label
     """
@@ -263,7 +311,7 @@ def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), act
     :param out_length: The size of the output.
     maximum 128
     :param lr: The initial learning rate.
-    :return: a tf.keras.model with almost the simpleHTR architekture
+    :return: a tf.keras.model with almost the simpleHTR architecture
     """
     # copied from https://github.com/UniDuEChristianGold/LineRecognition
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
@@ -352,38 +400,49 @@ def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), act
     return model
 
 
-class linepoint2lineimg(tf.keras.layers.Layer):
-    # https://www.tensorflow.org/text/tutorials/nmt_with_attention
-    # img, linepoint -> line of text that is shown in that image
-    # used to kit linefinder models (conv, cvff, cgg11) and linereader models (simpleHTR, simpleHTR2) together.
-    name = "linepoint2lineimg"
+class customlayer(tf.keras.layers.Layer):
 
-    def __init__(self, img_shape):
-        super().__init__(dynamic=True, trainable=False)
-        print("Models.linepoint2lineimg: init(", img_shape, ")")
-        self.imgshape = img_shape
+    def __init__(self, name):
+        print("Models.customlayer: name = ", name)
+        super(customlayer, self).__init__(name=name)
+        self.out_size = (32, 64)
 
     def build(self, batch_input_shape):
-        print("Models.linepoint2lineimg: build(", batch_input_shape, ")")
+        print("Models.customlayer: build(", batch_input_shape, ")")
 
     def compute_output_shape(self, unknwon):
-        print("Models.linepoint2lineimg.compute_output_shape: unknwon = ", unknwon)
-        numlines = 7
-        return (None, numlines, 32, 256)
+        return self.out_size
 
-    def call(self, linepoints, image):
-        print("Models.linepoint2lineimg: call(", Dataloader.getType(linepoints), ", ", Dataloader.getType(image), ")")
-        #linepoints = Dataloader.dense2linepoints(linepoints, max_x=self.imgshape[0], max_y=self.imgshape[1])
-        #assert linepoints.shape[1]%5 == 0
-        #max_x = self.imgshape[0]
-        #max_y = self.imgshape[1]
-        #linepoints = [((int(linepoints[i]*max_x), int(linepoints[i+1]*max_y)), (int(linepoints[i+2]*max_x), int(linepoints[i+3]*max_y)), int(linepoints[i+4]*max_y)) for i in range(0, linepoints.shape[1], 5)]
-        #print("linepoints = ", linepoints)
-        #linepoints = [((int(linepoints[i]*max_x), int(linepoints[i+1]*max_y)), (int(linepoints[i+2]*max_x), int(linepoints[i+3]*max_y)), max(1, int(linepoints[i+4]*max_y))) for i in range(0, linepoints.shape[1], 5)]
-        #TODO extracline is not supported:  OperatorNotAllowedInGraphError: using a `tf.Tensor` as a Python `bool` is not allowed: AutoGraph did convert this function. This might indicate you are trying to use an unsupported feature.
-        return [image[:][0:32][0:256] for i in range(7)]
-        #return [Dataloader.extractline(image, linepoints[i:5*i], max_x=self.imgshape[0], max_y=self.imgshape[1]) for i in range(linepoints.shape[1]//5)]
-
+    def call(self, img, linepoint):
+        """
+        :param img:
+        tf.tensor(shape=(x, y))
+        the paragraph image
+        :param pos:
+        tf.tensor(shape(5))
+        (x1, y1, x2, y2, h), so that ((x1, y1), (x2, y2), h) is linepoint
+        the upper left corner of the line
+        :return:
+        the slice of image that contions line
+        """
+        print("Models.customlayer: call img=", Dataloader.getType(img)+", pos=", Dataloader.getType(linepoint))
+        x1 = linepoint[0]
+        y1 = linepoint[1]
+        x2 = linepoint[2]
+        y2 = linepoint[3]
+        h = linepoint[4]
+        #(x1, y1, x2, y2, h) = linepoint  # not supported
+        alpha = np.arcsin((y2-y1)/(np.sqrt((x2-x1)**2+(y2-y1)**2)))  # NotImplementedError: Cannot convert a symbolic Tensor (mycustomlayer/add:0) to a numpy array. This error may indicate that you're trying to pass a Tensor to a NumPy call, which is not supported
+        lp_center = (0.5*x1+0.5*x2, 0.5*y1+0.5*y2)
+        #rotate image so that y1 == y2.
+        M = cv2.getRotationMatrix2D(lp_center, alpha*(180/np.pi), 32/h)
+        img = cv2.warpAffine(img, M, dsize=(32, 256), borderMode=cv2.BORDER_CONSTANT, borderValue=255)
+        # shift image so that (x1-h, y1-h) at (0, 0) is.
+        dx = x1-h
+        dy = y1-h
+        M = [[1, 0, -dx], [0, 1, -dy]]
+        img = cv2.warpAffine(img, M, dsize=(32, 256), borderMode=cv2.BORDER_CONSTANT, borderValue=255)
+        return img[:, 0:32, 0:256]
 
 def test_multioutput():
     # train on np.array((batch_size, input_size)) -> {name_of_output_layer: np.array((batch_size, output_size)), ...}
@@ -410,8 +469,12 @@ def linefinder(in_shape=(256, 256), output_shape=(2, 32, 256), activation='relu'
     :return:
     """
     # image of paragraph -> [image of line]
+    #kernel_size = (3, 3)  # Trainable params: 115,822
+    kernel_size = (5, 5)  # Trainable params: 191,758
+    #kernel_size = (9, 9)  # Trainable params: Trainable params: 343,126
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
-    cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(input_data)
+    cnn = tf.keras.layers.Rescaling(1./255)(input_data)
+    cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(cnn)
     current_shape = cnn.get_shape()
     while current_shape[1] != output_shape[1] or current_shape[2] != output_shape[2]:
         print("current shape = ", current_shape)
@@ -421,7 +484,10 @@ def linefinder(in_shape=(256, 256), output_shape=(2, 32, 256), activation='relu'
         if current_shape[2] > output_shape[2]:
             poolsize = (poolsize[0], 2)
         cnn = tf.keras.layers.Dropout(rate=0.2)(cnn)
-        cnn = tf.keras.layers.Conv2D(filters=output_shape[0], kernel_size=(5, 5), strides=(1, 1), padding="same")(cnn)
+
+        for i in range(max(current_shape[1], current_shape[2])//kernel_size[0]):
+            cnn = tf.keras.layers.Conv2D(filters=output_shape[0], kernel_size=kernel_size, strides=(1, 1), padding="same")(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=output_shape[0], kernel_size=kernel_size, strides=(1, 1), padding="same")(cnn)
 
         cnn = tf.keras.layers.BatchNormalization()(cnn)
         cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
@@ -432,57 +498,54 @@ def linefinder(in_shape=(256, 256), output_shape=(2, 32, 256), activation='relu'
     #outputs = [tf.keras.layers.Dense(units=output_shape[1]*output_shape[2], activation=activation, name="line"+str(i))(flat) for i in range(output_shape[0])]
 
     reshaped = tf.keras.layers.Reshape((output_shape[0], output_shape[1], output_shape[2], 1))(cnn)
-    outputs = [tf.keras.layers.Conv2D(filters=1, kernel_size=(9, 9), strides=(1, 1), padding="same", activation=activation, name="line"+str(i))(reshaped[:,i,:,:]) for i in range(output_shape[0])]
+    outputs = [tf.keras.layers.Conv2D(filters=1, kernel_size=(9, 9), strides=(1, 1), padding="same", activation=activation)(reshaped[:,i,:,:]) for i in range(output_shape[0])]
+    outputs = [tf.keras.layers.Reshape((output_shape[1], output_shape[2]))(output) for output in outputs]
+    #outputs = [tf.keras.layers.Attention()([output, input_data]) for output in outputs]
+    outputs = [tf.keras.layers.Rescaling(255., name="line"+str(i))(outputs[i]) for i in range(output_shape[0])]
+    outputs = [tf.keras.layers.Rescaling(255.)(output) for output in outputs]
 
-    losses = {}
-    for i in range(output_shape[0]):
-        losses["line"+str(i)] = keras.losses.MeanSquaredError()
+
+    #losses = {}
+    #for i in range(output_shape[0]):
+    #    losses["line"+str(i)] = keras.losses.MeanSquaredError()
     model = keras.Model(inputs=input_data, outputs=outputs, name="linefinder_model")
     opt = tf.keras.optimizers.Adam(learning_rate=2**-8, beta_1=0.5)
-    model.compile(loss=losses, optimizer=opt)
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)
     return model
 
-class customlayer(tf.keras.layers.Layer):
 
-    def __init__(self, name):
-        print("Models.customlayer: name = ", name)
-        super(customlayer, self).__init__(name=name)
-        self.out_size = (32, 64)
+def linefinder2(linepointfinder, out_shape):
+    """
+    :param linepointfinder:
+    trained model that returns linepoints
+    :param out_shape:
+    (number of lines per image, height of line in pixel, width of line in pixel)
+    :return:
+    """
+    in_shape = linepointfinder.get_config()["layers"][0]["config"]["batch_input_shape"][1:]  # returns a tuple of width, height and channels
 
-    def build(self, batch_input_shape):
-        print("Models.customlayer: build(", batch_input_shape, ")")
+    input_data = tf.keras.layers.Input(name="input", shape=in_shape)
+    linepoints = linepointfinder(input_data)
+    print("Models.linefinder2: linepoints = ", Dataloader.getType(linepoints))
+    lpexpandinglayer = tf.keras.layers.Dense(units=out_shape[1]*out_shape[2])
+    tmp = [lpexpandinglayer(linepoints[:,i*5:(i+1)*5]) for i in range(out_shape[0])]
+    tmp = [tf.keras.layers.Reshape((out_shape[1], out_shape[2]))(t) for t in tmp]
+    img = tf.keras.layers.Rescaling(1./255)(input_data)
+    img = tf.keras.layers.Reshape((in_shape[0]*in_shape[1], 1))(img)
+    lineimgs = [tf.keras.layers.Attention()([tf.keras.layers.Reshape((out_shape[1]*out_shape[2], 1))(t), img]) for t in tmp]
+    lineimgs = [tf.keras.layers.Reshape((out_shape[1], out_shape[2]))(limg) for limg in lineimgs]
+    outputs = [tf.keras.layers.Rescaling(255)(limg) for limg in lineimgs]
 
-    def compute_output_shape(self, unknwon):
-        return self.out_size
-
-    def call(self, img, pos):
-        """
-        :param img:
-        tf.tensor(shape=(x, y))
-        the paragraph image
-        :param pos:
-        tf.tensor(shape(2))
-        the upper left corner of the line
-        :return:
-        the slice of image that contions line
-        """
-        print("Models.customlayer: call img=", Dataloader.getType(img)+", pos=", Dataloader.getType(pos))
-        bi = 0
-        # pos[bi][0] has to be int, but casting it to int leads to "ValueError: No gradients provided"
-        #pos = tf.cast(pos, dtype=tf.int32)
-        r = np.zeros((32, 256))
-        for i in range(len(r)):
-            for j in range(len(r[i])):
-                r[i][j] = 0
-                for ii in range(img.shape[0]):
-                    for ij in range(img.shape[1]):
-                        weigth = 1/(abs(i+pos[0]-ii)**2+abs(j+pos[1]-ij)**2)  # weight = 1/distance of requested pixel with (ii, ij)
-                        r[i][j] += weigth*img[ii][ij]
-        #return tf.slice(img, begin=(0, pos[bi][0], pos[bi][1]), size=(-1, self.out_size[0], self.out_size[1]))
-        return r
+    model = keras.Model(inputs=input_data, outputs=outputs, name="linefinder_model")
+    opt = tf.keras.optimizers.Adam(learning_rate=2**-8, beta_1=0.5)
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)
+    return model
 
 
-def total(in_shape, linefindermodel, linereadermodel, out_shape=len(Dataloader.alphabet)):
+# linefinder(img->linepoint) und htr(line->txt) seperat haben
+def total(linefindermodel, linereadermodel, out_shape=len(Dataloader.alphabet)):
+    in_shape = linefindermodel.get_config()["layers"][0]["config"]["batch_input_shape"][1:]  # returns a tuple of width, height and channels
+
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
     lineimgs = linefindermodel(input_data)
     texts = [linereadermodel(lineimg) for lineimg in lineimgs]
@@ -492,8 +555,9 @@ def total(in_shape, linefindermodel, linereadermodel, out_shape=len(Dataloader.a
     model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)
     return model
 
+
 # maybe use model_conv[-2].outputs as inputs to attention
-def oldtotal(in_shape=(256, 256), out_length=6, activation='linear'):
+def oldtotal(in_shape=(256, 256), out_length=6, activation='relu'):
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
     linepoints = conv(in_shape=in_shape, out_length=out_length, activation=activation)(input_data)
     lineimgs = customlayer(name="mycustomlayer")(input_data, linepoints)

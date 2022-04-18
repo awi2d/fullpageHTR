@@ -46,7 +46,7 @@ def show_trainhistory(history, name="unnamed model"):
     """
     assert len(history["loss"]) == len(history["val_loss"]) == len(history["lr"])
     try:
-        import matplotlib.pyplot as ploter  # TODO import should be at start of file
+        import matplotlib.pyplot as ploter
     except:
         print("Matplotlib is not installed, cant execute show_trainhistory")
         return None
@@ -97,15 +97,15 @@ def show_trainhistory(history, name="unnamed model"):
 # </debug functions>
 
 
-def train(model, saveName, dataset, val, start_lr=2**(-8)):
+def train(model, saveName, dataset, val=None, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 128  # führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+    batch_size = 12  # batch_size=128 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
-    print("x.shape = ", val[0][0].shape)
-    print("y.shape = ", val[1][0].shape)
+    #print("x.shape = ", val[0][0].shape)
+    #print("y.shape = ", val[1][0].shape)
 
     callback = tf.keras.callbacks.EarlyStopping(
         monitor='val_loss', min_delta=0, patience=30, verbose=0,
@@ -218,9 +218,11 @@ def infer(name, dataset):
         #    print("img shape = ", img.shape, " and input shape = ", input_size, " should be the same")
         #    print("validation image has to be the same size or smaler than largest training image")
         #    return None
-        points = model.predict([img])  # returns list of predictions.
-        print("infer: ", img, " -> ", points)
-        infered.append(points[0])
+        pred = model.predict([img])  # returns list of predictions.
+        print("infer: ", Dataloader.getType(img), " -> ", Dataloader.getType(pred))
+        shape = tuple([x for x in np.array(pred).shape if x > 1])
+        pred = np.reshape(pred, shape)
+        infered.append(pred)
         # img is of type float, cv2 needs type int to show.
     # test_x = dataset.show((test_x, test_y))
     dataset.show((test_x, test_y), infered)
@@ -269,36 +271,60 @@ def show_models(model, name, dataset):
 
 
 if __name__ == "__main__":
-    # TODO attention lernen und anwenden
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
-    # cnn1 = Attention(..., img, linepoints)
-    # cnn2 = Attention(..., img, linepoints)
     # simpleHTR trainieren (auch wenn <5 MiB belegt)
-    # conv und simpleHTR2 zusammenfügen (mit attention oder ausschneiden)
-    # inputbild vergrößern (1500x2000)
+    # 1. inputbild vergrößern (512x1024) (5 zeilen), batch-size 16-32
+    # 2. conv und simpleHTR2 zusammenfügen mit segmentation außerhalb des Modells
+    # 3. variable länge
+    # 4. segmentation durch matrixmult lösen
+    # 5. linepoint -(dense layer)-> shape of line -(attention)-> line
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
+    # TODO batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
     print("start")
+    # init all datasets needed.
+    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
+    ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
+    ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    model_linefinder = Models.linefinder(in_shape=(256, 256), output_shape=(7, 32, 256))
-    ds_lineimg = Dataloader.img2lineimgDataset()
-    train(model_linefinder, saveName="linefinder", dataset=ds_lineimg, val=ds_lineimg.get_batch(64))
-    del ds_lineimg
-    model_htr = Models.simpleHTR(in_shape=(32, 256))
-    ds_htr = Dataloader.Dataset.htr()
-    train(model_htr, saveName="htr", dataset=ds_htr, val=ds_htr.get_batch(64))
-    del ds_htr
-    ds = Dataloader.Dataset.total()
-    model_total = Models.total(in_shape=(256, 256), linefindermodel=model_linefinder, linereadermodel=model_htr)
-    model_total.summary()
-    train(model_total, saveName="total", dataset=ds, val=ds.get_batch(64))
+    maxlinecount = 5  # duplicate max(lines_per_paragrph) in Dataloader.getData
+    linesshape = (maxlinecount, ds_ltxt.imgsize[0], ds_ltxt.imgsize[1])  # the lineshape of (32, 256) is hardcoded all over dataloader
+
+
+    #train all relevant models
+    #linefinder2
+    #model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
+    #train(model_conv, saveName="lp_conv", dataset=ds_plp, start_lr)
+    #model_linefinder2 = Models.linefinder2(model_conv, out_shape=linesshape)
+    #train(model_linefinder2, saveName="limg_linefinder2", dataset=ds_plimg, start_lr=0.0000001)
+    #del model_conv
+    #del model_linefinder2
+
+    #htr TODO improve htr model to not outpt "t"*18+"#"*3
+    model_htr = Models.htr(in_shape=ds_ltxt.imgsize)
+    train(model_htr, saveName="htr", dataset=ds_ltxt, start_lr=0.0000001)
+
+    # linefinder
+    # Process finished with exit code -1073740791 (0xC0000409)
+    # while SSD-auslastung == 100%, arbeitsspeicherauslastung > 90%, cpu-auslastung zwieschen 10% und 100%
+    # inklusive PC-freeze für 1min
+    # das alles in der model.fit methode (in main.train(model_linefinder))
+    model_linefinder = Models.linefinder(in_shape=ds_plimg.imgsize, output_shape=linesshape)
+    #model_linefinder.summary()  # 259,550 params < conv(256, 256)
+    train(model_linefinder, saveName="linefinder", dataset=ds_plimg, start_lr=0.0000001)
+
+    #total
+    model_total = Models.total(linefindermodel=model_linefinder, linereadermodel=model_htr)
+    train(model_total, saveName="total", dataset=ds_ptxt, start_lr=0.0000001)
     exit(0)
     #names = ["real_convhard_sigmoid_mse_lr8", "real_convswish_mse_lr8", "real_cvfflinear_mse_lr8", "real_vgg11hard_sigmoid_mse_lr8"]  # scheinen zu funktionieren
     #for n in names:
     #    print("\n", n)
     #    infer(n, dataset)
     exit(0)
-    dataset = Dataloader.Dataset(Dataloader.data_dir, gl_type=Dataloader.GoldlabelTypes.text, gl_encoding=Dataloader.GoldlabelEncodings.onehot, img_type=Dataloader.ImgTypes.line)
+
+    dataset = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
     x, y = dataset.get_batch(1024)  # validation data
     x_shape = x[0].shape
     print(x_shape, " -> ", y[0].shape)
