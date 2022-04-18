@@ -381,9 +381,15 @@ if __name__ == "__main__":
     #del model_linefinder2
 
     # linepoint
+    model_conv2 = Models.conv2(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
+    train(model_conv2, saveName="lp_conv2", dataset=ds_plp, batch_size=128)
+    print("finished training conv2")
+
     model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
-    train(model_conv, saveName="lp_conv", dataset=ds_plp, batch_size=256)
+    train(model_conv, saveName="lp_conv", dataset=ds_plp, batch_size=128)
     print("finished training conv")
+
+    exit(0)
 
     #htr
     losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working

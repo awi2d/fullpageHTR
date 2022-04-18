@@ -173,6 +173,44 @@ def conv(in_shape, out_length, activation='hard_sigmoid'):
     return model
 
 
+def conv2(in_shape, out_length, activation='hard_sigmoid'):
+    assert out_length % 5 == 0  # dense encoding of linepoint has 5 values
+    input_data = tf.keras.layers.Input(name="input", shape=in_shape)
+    cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
+    cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(cnn)
+
+    target_shape = (2*out_length, 1)
+    current_shape = cnn.get_shape()
+    while current_shape[1] > target_shape[0] or current_shape[2] > target_shape[1]:
+        print("current shape = ", current_shape)
+        strides = (1, 1)
+        if current_shape[1] > target_shape[0]:
+            strides = (2, 1)
+        if current_shape[2] > target_shape[1]:
+            strides = (strides[0], 2)
+
+        cnn = tf.keras.layers.Conv2D(filters=16, kernel_size=(5, 5), strides=(1, 1), padding="same")(cnn)
+
+        cnn = tf.keras.layers.BatchNormalization()(cnn)
+        cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
+        cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
+        current_shape = cnn.get_shape()
+
+    cnn = tf.keras.layers.Conv2D(filters=5, kernel_size=(9, 9), strides=(1, 1), padding="same")(cnn)
+    current_shape = cnn.get_shape()
+    cnn = tf.keras.layers.Reshape((current_shape[1], current_shape[3]))(cnn)
+    attin = tf.keras.layers.Dense(units=out_length)(tf.keras.layers.Flatten()(cnn))
+    attin = tf.keras.layers.Reshape((out_length//5, 5))(attin)
+
+    output_data = tf.keras.layers.Attention()([attin, cnn])
+    output_data = tf.keras.layers.Flatten()(output_data)
+    output_data = tf.keras.layers.Dense(units=out_length)(output_data)
+
+    model = keras.Model(inputs=input_data, outputs=output_data, name="conv2")
+    opt = tf.keras.optimizers.Adam(learning_rate=0.0003, beta_1=0.5)
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)
+    return model
+
 def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation='relu'):
     """
     :param in_shape:
