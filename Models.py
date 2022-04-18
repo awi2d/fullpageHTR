@@ -297,9 +297,9 @@ def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="rel
 
     # ====================== Dense 0 ======================
 
-    tmp = tf.keras.layers.Dense(units=128, activation="relu")(blstm)
+    tmp = tf.keras.layers.Dense(units=256, activation="relu")(blstm)
     tmp = tf.keras.layers.Attention()([blstm, tmp])
-    output_data = tf.keras.layers.Softmax()(tmp)
+    output_data = tf.keras.layers.Dense(units=out_length, activation="softmax")(tmp)
 
     model = keras.Model(inputs=input_data, outputs=output_data, name="simpleHTR2")
     opt = tf.keras.optimizers.Adam(learning_rate=0.0003, beta_1=0.5)
