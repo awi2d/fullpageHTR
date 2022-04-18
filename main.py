@@ -1,4 +1,5 @@
 import cv2
+import keras.losses
 import numpy as np
 import tensorflow as tf
 from keras import backend
@@ -97,10 +98,25 @@ def show_trainhistory(history, name="unnamed model"):
 # </debug functions>
 
 
-def train(model, saveName, dataset, val=None, start_lr=2**(-8)):
+def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None):
     start_time = time.time()
-    # TODO find better batch_size
-    batch_size = 32  # batch_size=128 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+    # find better batch_size
+    if batch_size is None:
+        batch_size = 8  # batch_size=128 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+        cludder = [model.get_weights() for _ in range(4)]
+        while True:
+            batch_size *= 2
+            try:
+                x_train, y_train = dataset.get_batch(batch_size)  # just hope the compiler is not smart enough to optimise this code
+                print("main.train: ", Dataloader.getType(x_train), " -> ", Dataloader.getType(y_train))
+            except:
+                batch_size = int(batch_size/8)
+                break
+        del cludder
+        print("main.train: ", saveName, ": batch_size = ", batch_size)
+        del x_train
+        del y_train
+    #init other values
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -124,6 +140,8 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8)):
     long_epochs = 64
     short_epochs = 2
     best_model = (valLoss, model.get_weights())
+
+    # train
     while True:
         if lr == old_lr or lr == older_lr:
             # train for long
@@ -287,6 +305,38 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
         cv2.waitKey(0)
     return None
 
+#<copied from https://github.com/tensorflow/tensorflow/issues/35063>
+@tf.function(autograph=False)
+def get_labels(data):
+    def py_get_labels(y_true):
+        y_true = y_true.numpy().astype(np.int64)
+        label_length = np.array([i[-1] for i in y_true]).astype(np.int32)  # the labels length is codify in the target sequence
+        labels = np.zeros(
+            (len(label_length), np.max(label_length))).astype(np.int64)
+        for nxd, i in enumerate(y_true):
+            labels[nxd, :i[-1]] = i[:i[-1]].astype(np.int64)
+        return labels, label_length
+    return tf.py_function(py_get_labels, [data], (tf.int64, tf.int32))
+
+
+class CTCLoss(tf.losses.Loss):
+    def __init__(self, logit_length, blank_index=0, logits_time_major=False):
+        super(CTCLoss, self).__init__()
+        self.logit_length = tf.convert_to_tensor(logit_length)
+        self.blank_index = blank_index
+        self.logits_time_major = logits_time_major
+
+    def call(self, y_true, y_pred):
+        labels, label_length = get_labels(y_true)
+        print("main.CTCLoss: call labels=", Dataloader.getType(labels), ", label_length =", Dataloader.getType(label_length), ", y_true =", Dataloader.getType(y_true), ", y_pred =", Dataloader.getType(y_pred))
+        return tf.reduce_mean(tf.nn.ctc_loss(
+            labels=labels, logits=y_pred, label_length=label_length,
+            logit_length=self.logit_length,
+            logits_time_major=self.logits_time_major,
+            blank_index=self.blank_index
+        ))
+#</copied from https://github.com/tensorflow/tensorflow/issues/35063>
+
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
@@ -300,14 +350,22 @@ if __name__ == "__main__":
     # lineRecognition
     # TODO batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
     print("start")
-
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
     #exit(0)
-    #ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    #ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
-    #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
+    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
+    ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
+
+    if False:
+        history = read_dict("lp_conv")
+        show_trainhistory(history, "lp_conv")
+        history = read_dict("htr")
+        show_trainhistory(history, "htr")
+        infer("lp_conv", ds_plp)
+        infer("htr", ds_ltxt)
+        exit(0)
 
     maxlinecount = 5  # duplicate max(lines_per_paragrph) in Dataloader.getData
     linesshape = (maxlinecount, ds_ltxt.imgsize[0], ds_ltxt.imgsize[1])  # the lineshape of (32, 256) is hardcoded all over dataloader
@@ -323,13 +381,18 @@ if __name__ == "__main__":
     #del model_linefinder2
 
     # linepoint
-    #model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
-    #train(model_conv, saveName="lp_conv", dataset=ds_plp)
+    model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
+    train(model_conv, saveName="lp_conv", dataset=ds_plp, batch_size=256)
+    print("finished training conv")
 
     #htr
-    model_htr = Models.htr(in_shape=ds_ltxt.imgsize)
-    train(model_htr, saveName="htr", dataset=ds_ltxt)
+    losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working
+    for (loss, nm) in losses:
+        model_htr = Models.htr(in_shape=ds_ltxt.imgsize, loss=loss)
+        train(model_htr, saveName="htr"+nm, dataset=ds_ltxt, batch_size=1024)
     print("finished training htr")
+
+    exit(0)
 
     # linefinder
     # Process finished with exit code -1073740791 (0xC0000409)

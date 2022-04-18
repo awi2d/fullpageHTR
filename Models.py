@@ -129,11 +129,7 @@ def vgg11(in_shape, out_length, activation="linear"):
     return model
 
 
-# neue modelle:
-# erst conv und averagePooling, dann dense
-#
-# filter anzahl/größer machen
-def conv(in_shape=(32, 32), out_length=6, activation='linear'):
+def conv(in_shape, out_length, activation='hard_sigmoid'):
     # trainable parameters 23,316
     model = tf.keras.models.Sequential(name="conv")
 
@@ -256,7 +252,7 @@ def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activatio
     model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
-def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="relu"):
+def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), loss=keras.losses.MeanSquaredError()):
     # same as simpleHTR2, but for arbitrary input shapes
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
     cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
@@ -303,11 +299,11 @@ def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="rel
 
     model = keras.Model(inputs=input_data, outputs=output_data, name="simpleHTR2")
     opt = tf.keras.optimizers.Adam(learning_rate=0.0003, beta_1=0.5)
-    model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
+    model.compile(loss=loss, optimizer=opt)
     return model
 
 
-def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), activation='relu', lr=3e-4):  # TODO add +1 to len(alphabet) ctc-blank label
+def simpleHTR2(in_shape=(2048, 128, 1), out_length=len(Dataloader.alphabet), activation='relu', lr=3e-4):
     """
     :param in_shape: The size of the input to the network.
     :param out_length: The size of the output.

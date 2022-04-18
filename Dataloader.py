@@ -185,7 +185,7 @@ def dense2points(points: [float], max_x=32, max_y=32) -> [(int, int)]:
     return [(int(points[2*i]*max_x), int(points[2*i+1]*max_x)) for i in range(int(len(points)/2))]
 
 
-alphabet = np.array([""]+list(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!#"))
+alphabet = np.array(["-", ""]+list(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!#"))  # "-" is ctc blank label, "#" is linebreak
 def txt2sparse(txt, y_size):
     #print("Dataloader.txt2sparse: txt ", len(txt), ", ysize ", y_size)
     assert len(txt) <= y_size
@@ -943,7 +943,7 @@ class Dataset(abstractDataset):
         self.img_type = img_type
         self.gl_type = gl_type
 
-        self.line_para_winkel = (3, 5)
+        self.line_para_winkel = (0, 0)  # (3, 5)
         self.do_not_fix_dimensions_just_flip = False
 
         self.gl_encoding = self.gl_encoding[self.gl_type]
