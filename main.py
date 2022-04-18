@@ -205,7 +205,7 @@ def infer(name, dataset):
     config = model.get_config()  # Returns pretty much every information about your model
     input_size = config["layers"][0]["config"]["batch_input_shape"][1:]  # returns a tuple of width, height and channels
     # input_size = model.layers[0].input_shape[0][1:]  # for test.h5 from findfollowreadlite_dense
-    print("infe.input_size: ", input_size)
+    print("main.infer: input_size: ", input_size)
     for img in test_x:
         # test that all images have the correct size for the tf.model
         if not (img.shape[0] == input_size[0] and img.shape[1] == input_size[1]):
@@ -269,6 +269,24 @@ def show_models(model, name, dataset):
     exit(0)
 
 
+def external_seg(modelname_lp, modelname_htr, ds_ptxt):
+    model_lp = tf.keras.models.load_model(Dataloader.models_dir + modelname_lp + ".h5")
+    model_htr = tf.keras.models.load_model(Dataloader.models_dir + modelname_htr + ".h5")
+    paraimg_size = model_lp.get_config()["layers"][0]["config"]["batch_input_shape"][1:]
+    imgs, texts = ds_ptxt.get_batch(10)
+    imgs = [np.reshape(img, (1, img.shape[0], img.shape[1])) for img in imgs]
+    for img in imgs:
+        linepoints = model_lp.predict([img])
+        #linepoints_unencoded = Dataloader.dense2linepoints(linepoints, paraimg_size[0], paraimg_size[1])
+        lineimgs = [Dataloader.extractline(img, lp, paraimg_size[0], paraimg_size[1]) for lp in linepoints]
+        texts = [model_htr.predict([limg]) for limg in lineimgs]
+        for txt in texts:
+            print("gl = ", txt)
+        cv2.imshow("paragrph img", img)
+        [cv2.imshow("line"+str(i), lineimgs[i]) for i in range(len(lineimgs))]
+        cv2.waitKey(0)
+    return None
+
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
@@ -282,7 +300,13 @@ if __name__ == "__main__":
     # lineRecognition
     # TODO batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
     print("start")
+    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    model_lp = Models.conv(in_shape=ds_plp.imgsize, out_length=25, activation="hard_sigmoid")
+    train(model_lp, "lp_conv", ds_plp, val=None)
+    exit(0)
     # init all datasets needed.
+    external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
+    exit(0)
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
     ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
     ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)

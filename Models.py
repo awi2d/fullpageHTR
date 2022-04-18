@@ -281,7 +281,7 @@ def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="rel
         cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
         current_shape = cnn.get_shape()
 
-    # Shape: (batch, new_rows, new_cols, filters)
+    # Shape: (batch, chars_in_output, filters)
     blstm = tf.keras.layers.Reshape((desieredshape[2], 128))(cnn)
 
     # ====================== BLSTM 0 ======================
