@@ -42,7 +42,6 @@ class DatasetNames:
     iam = 30
 
 
-@tf.function
 def extractline(img, linepoint: [float], max_x: int, max_y: int):
     """
     :param img:
@@ -59,11 +58,12 @@ def extractline(img, linepoint: [float], max_x: int, max_y: int):
     #print("Datloader.extractline: linepoint = ", linepoint)
     #rotate image so that line is horizontal
     ((x1, y1), (x2, y2), h_lp) = linepoint[0]
+    #print("Dataloader.extractline: linepoint[0] = ", linepoint[0])
     # y1 == y2 => ist bereits gerade
-    if abs(x2-x1)+abs(y2-y1) < 5:
+    if abs(x2-x1)+abs(y2-y1) < 5 or h_lp < 2:
         # <=> is empty  ((0, 0), (0, 0), 0) linepoint
         print("Dataloader.extractline: empty linepoint -> return black empty image")
-        return np.zeros((32, 128))
+        return np.zeros((32, 256))
     if abs(y2-y1) > 1:  # line is not already horizontal
         alpha = np.arcsin((y2-y1)/(np.sqrt((x2-x1)**2+(y2-y1)**2)))
         #print("Dataloader.extractline:  alpha = ", alpha)
@@ -74,19 +74,20 @@ def extractline(img, linepoint: [float], max_x: int, max_y: int):
     # cut line
     #cv2.imshow("rotated", img)
     #cv2.waitKey(0)
-    print("Dataloader.extractline: linepoint = ", linepoint)
+    #print("Dataloader.extractline: linepoint_rotated = ", linepoint)
     (h_img, w) = img.shape
-    print("Dataloader.extractline: img.shape = ", (h_img, w))
+    #print("Dataloader.extractline: img.shape_prae = ", (h_img, w))
     y = int(0.5*y1+0.5*y2)  # y1 and y2 should already be almost the same
     left_bound = max(0, int(x1-h_lp))
     right_bound = min(w, int(x2+h_lp))
     upper_bound = max(0, int(y-h_lp))
     lower_bound = min(h_img, int(y+h_lp))
     #print("Dataloader.extractline: bounds = ", ((left_bound, right_bound), (upper_bound, lower_bound)))
-    img = np.array(img[left_bound:right_bound][upper_bound:lower_bound], dtype="uint8")
+    img = np.array(img[left_bound:right_bound, upper_bound:lower_bound], dtype="uint8")
     # scale image to hight of 32
-    print("Dataloader.extractline: img.shape = ", img.shape)
-    return cv2.resize(img, (128, 32), interpolation=cv2.INTER_AREA)
+    #print("Dataloader.extractline: img.shape_cutted = ", img.shape)
+    img = cv2.resize(img, (256, 32), interpolation=cv2.INTER_AREA)
+    return img
 
 
 # <debug functions>
@@ -197,7 +198,7 @@ def txt2sparse(txt, y_size):
         #b[i*len(alphabet)+a[i]] = 1
         b[i][a[i]] = 1
     return np.array(b)
-def sparse2txt(sparse, y_size):
+def sparse2txt(sparse, y_size=0):
     dense = [str(alphabet[np.argmax(sparse_char)]) for sparse_char in sparse]
     return "".join(dense)
 
