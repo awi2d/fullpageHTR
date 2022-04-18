@@ -100,7 +100,7 @@ def show_trainhistory(history, name="unnamed model"):
 def train(model, saveName, dataset, val=None, start_lr=2**(-8)):
     start_time = time.time()
     # TODO find better batch_size
-    batch_size = 12  # batch_size=128 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
+    batch_size = 32  # batch_size=128 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
     if val is None or len(val) == 0:
         val = dataset.get_batch(batch_size)
     # print("train: ", x_train[0], " -> ", y_train[0])
@@ -303,7 +303,8 @@ if __name__ == "__main__":
 
     #htr TODO improve htr model to not outpt "t"*18+"#"*3
     model_htr = Models.htr(in_shape=ds_ltxt.imgsize)
-    train(model_htr, saveName="htr", dataset=ds_ltxt, start_lr=0.0000001)
+    train(model_htr, saveName="htr", dataset=ds_ltxt)
+    print("finished training htr")
 
     # linefinder
     # Process finished with exit code -1073740791 (0xC0000409)
@@ -312,7 +313,7 @@ if __name__ == "__main__":
     # das alles in der model.fit methode (in main.train(model_linefinder))
     model_linefinder = Models.linefinder(in_shape=ds_plimg.imgsize, output_shape=linesshape)
     #model_linefinder.summary()  # 259,550 params < conv(256, 256)
-    train(model_linefinder, saveName="linefinder", dataset=ds_plimg, start_lr=0.0000001)
+    train(model_linefinder, saveName="linefinder", dataset=ds_plimg)
 
     #total
     model_total = Models.total(linefindermodel=model_linefinder, linereadermodel=model_htr)
