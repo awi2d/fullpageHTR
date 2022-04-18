@@ -274,7 +274,7 @@ def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="rel
         if current_shape[2] > desieredshape[2]:
             strides = (strides[0], 2)
 
-        cnn = tf.keras.layers.Conv2D(filters=128, kernel_size=(3, 3), strides=(1, 1), padding="same")(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=128, kernel_size=(5, 5), strides=(1, 1), padding="same")(cnn)
 
         cnn = tf.keras.layers.BatchNormalization()(cnn)
         cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
@@ -297,7 +297,9 @@ def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation="rel
 
     # ====================== Dense 0 ======================
 
-    output_data = tf.keras.layers.Dense(units=out_length, activation="softmax")(blstm)
+    tmp = tf.keras.layers.Dense(units=128, activation="relu")(blstm)
+    tmp = tf.keras.layers.Attention()([blstm, tmp])
+    output_data = tf.keras.layers.Softmax()(tmp)
 
     model = keras.Model(inputs=input_data, outputs=output_data, name="simpleHTR2")
     opt = tf.keras.optimizers.Adam(learning_rate=0.0003, beta_1=0.5)

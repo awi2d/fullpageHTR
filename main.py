@@ -300,16 +300,13 @@ if __name__ == "__main__":
     # lineRecognition
     # TODO batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
     print("start")
-    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    model_lp = Models.conv(in_shape=ds_plp.imgsize, out_length=25, activation="hard_sigmoid")
-    train(model_lp, "lp_conv", ds_plp, val=None)
-    exit(0)
+
     # init all datasets needed.
-    external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
-    exit(0)
-    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
-    ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
+    #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
+    #exit(0)
+    #ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    #ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
+    #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
     maxlinecount = 5  # duplicate max(lines_per_paragrph) in Dataloader.getData
@@ -325,7 +322,11 @@ if __name__ == "__main__":
     #del model_conv
     #del model_linefinder2
 
-    #htr TODO improve htr model to not outpt "t"*18+"#"*3
+    # linepoint
+    #model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
+    #train(model_conv, saveName="lp_conv", dataset=ds_plp)
+
+    #htr
     model_htr = Models.htr(in_shape=ds_ltxt.imgsize)
     train(model_htr, saveName="htr", dataset=ds_ltxt)
     print("finished training htr")
