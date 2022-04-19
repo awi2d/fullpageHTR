@@ -42,7 +42,7 @@ class DatasetNames:
     iam = 30
 
 
-def extractline(img, linepoint: [float], max_x: int, max_y: int):
+def extractline(img, linepoint: [float]):
     """
     :param img:
     :param linepoint:
@@ -54,15 +54,20 @@ def extractline(img, linepoint: [float], max_x: int, max_y: int):
     img = np.array(img, dtype="uint8")
 
     #print("Datloader.extractline: linepoint = ", linepoint)
-    linepoint = dense2linepoints(linepoint, max_x=max_x, max_y=max_y)
+    (h_img, w) = img.shape
+    print("Dataloader.extractline: img.shape_prae = ", (h_img, w))
+    linepoint = dense2linepoints(linepoint, max_x=w, max_y=h_img)
     #print("Datloader.extractline: linepoint = ", linepoint)
     #rotate image so that line is horizontal
     ((x1, y1), (x2, y2), h_lp) = linepoint[0]
-    #print("Dataloader.extractline: linepoint[0] = ", linepoint[0])
+    print("Dataloader.extractline: linepoint[0] = ", linepoint[0])
     # y1 == y2 => ist bereits gerade
     if abs(x2-x1)+abs(y2-y1) < 5 or h_lp < 2:
         # <=> is empty  ((0, 0), (0, 0), 0) linepoint
         print("Dataloader.extractline: empty linepoint -> return black empty image")
+        return np.zeros((32, 256))
+    if x1 < 0 or x1 > h_img or x2 < 0 or x2 > h_img or y1 < 0 or y1 > w or y2 < 0 or y2 > w:
+        print("Dataloader.extractline: linepoint out of image -> return black empty image")
         return np.zeros((32, 256))
     if abs(y2-y1) > 1:  # line is not already horizontal
         alpha = np.arcsin((y2-y1)/(np.sqrt((x2-x1)**2+(y2-y1)**2)))
@@ -74,18 +79,27 @@ def extractline(img, linepoint: [float], max_x: int, max_y: int):
     # cut line
     #cv2.imshow("rotated", img)
     #cv2.waitKey(0)
-    #print("Dataloader.extractline: linepoint_rotated = ", linepoint)
+    print("Dataloader.extractline: linepoint_rotated = ", ((x1, y1), (x2, y2), h_lp))
     (h_img, w) = img.shape
-    #print("Dataloader.extractline: img.shape_prae = ", (h_img, w))
+    print("Dataloader.extractline: img.shape_rot = ", (h_img, w))
     y = int(0.5*y1+0.5*y2)  # y1 and y2 should already be almost the same
+    #left_bound = max(0, int(x1-h_lp))
+    #right_bound = min(h_img, int(x2+h_lp))
+    #upper_bound = max(0, int(y-h_lp))
+    #lower_bound = min(w, int(y+h_lp))
     left_bound = max(0, int(x1-h_lp))
-    right_bound = min(w, int(x2+h_lp))
+    right_bound = max(0, int(x2+h_lp))
     upper_bound = max(0, int(y-h_lp))
-    lower_bound = min(h_img, int(y+h_lp))
-    #print("Dataloader.extractline: bounds = ", ((left_bound, right_bound), (upper_bound, lower_bound)))
-    img = np.array(img[left_bound:right_bound, upper_bound:lower_bound], dtype="uint8")
+    lower_bound = max(0, int(y+h_lp))
+    print("Dataloader.extractline: bounds = ", ((left_bound, right_bound), (upper_bound, lower_bound)))
+    a = cv2.line(img, (x1, y1), (x2, y2), 125, thickness=3)
+    a = cv2.rectangle(a, (left_bound, upper_bound), (right_bound, lower_bound), 125)
+    cv2.imshow("a", a)
+    cv2.waitKey(0)
+    #img = np.array(img[left_bound:right_bound, upper_bound:lower_bound], dtype="uint8")
+    img = np.array(img[upper_bound:lower_bound, left_bound:right_bound], dtype="uint8")
     # scale image to hight of 32
-    #print("Dataloader.extractline: img.shape_cutted = ", img.shape)
+    print("Dataloader.extractline: img.shape_cutted = ", img.shape)
     img = cv2.resize(img, (256, 32), interpolation=cv2.INTER_AREA)
     return img
 
@@ -1015,7 +1029,7 @@ class Dataset(abstractDataset):
                 if predicted is not None:
                     predPoints = decode_func(predicted[i], max_x=w, max_y=h)
                 for point in points:
-                    #print("point = ", point)
+                    print("point = ", point)
                     #point = ((max(1, int(point[0][0])), max(1, int(point[0][1]))), (max(1, int(point[1][0])), max(1, int(point[1][1]))), max(1, int(point[2])))
                     cv2.circle(img, point[0], int(point[2]/2), 0, 3)
                     cv2.rectangle(img, (point[0][0]-5, point[0][1]-5), (point[0][0]+5, point[0][1]+5), 0, 2)

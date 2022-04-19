@@ -297,7 +297,7 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
         linepoints = model_lp.predict([np.reshape(img, (1, img.shape[0], img.shape[1]))])
         print("main.external_seg: pred = ", Dataloader.getType(linepoints))
         linepoints = np.array(linepoints[0])
-        lineimgs = [Dataloader.extractline(img, linepoints[i*5:(i+1)*5], paraimg_size[0], paraimg_size[1]) for i in range(len(linepoints)//5)]
+        lineimgs = [Dataloader.extractline(img, linepoints[i*5:(i+1)*5]) for i in range(len(linepoints)//5)]
         print("main.external_seg: lineimgs = ", Dataloader.getType(lineimgs))
         texts = [model_htr.predict([np.reshape(limg, (1, limg.shape[0], limg.shape[1]))])[0] for limg in lineimgs]
         for txt in texts:
@@ -360,13 +360,25 @@ if __name__ == "__main__":
     ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    if True:
-        history = read_dict("lp_conv")
-        show_trainhistory(history, "lp_conv")
-        history = read_dict("htr")
-        show_trainhistory(history, "htr")
+    #<test Dataloader.extractline>
+    if False:
+        batch = ds_plp.get_batch(10)
+        for i in range(len(batch[0])):
+            (img, lp) = batch[0][i], batch[1][i]
+            print("(img, lp) = ", Dataloader.getType((img, lp)))
+            ds_plp.show(([img], [lp]))
+            limgs = [Dataloader.extractline(img, lp[il*5:(il+1)*5]) for il in range(len(lp)//5)]
+            [cv2.imshow("line"+str(li), np.array(limgs[li], dtype="uint8")) for li in range(len(limgs))]
+            cv2.waitKey(0)
+        exit(0)
+    #</test>
+
+    if False:
+        for name in ["lp_conv2"]:  # , "lp_conv"
+            history = read_dict(name)
+            show_trainhistory(history, name)
+            infer(name, ds_plp)
         external_seg("lp_conv", "htr", ds_ptxt)
-        #infer("lp_conv", ds_plp)
         #infer("htr", ds_ltxt)
         exit(0)
 
@@ -391,13 +403,12 @@ if __name__ == "__main__":
     model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
     train(model_conv, saveName="lp_conv", dataset=ds_plp, batch_size=32)
     print("finished training conv")
-    exit(0)
 
     #htr
     losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working
     for (loss, nm) in losses:
         model_htr = Models.htr(in_shape=ds_ltxt.imgsize, loss=loss)
-        train(model_htr, saveName="htr"+nm, dataset=ds_ltxt, batch_size=1024)
+        train(model_htr, saveName="htr_mse"+nm, dataset=ds_ltxt, batch_size=64)
     print("finished training htr")
 
     exit(0)
