@@ -343,42 +343,45 @@ class CTCLoss(tf.losses.Loss):
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
     # simpleHTR trainieren (auch wenn <5 MiB belegt)
-    # 1. inputbild vergrößern (512x1024) (5 zeilen), batch-size 16-32
-    # 2. conv und simpleHTR2 zusammenfügen mit segmentation außerhalb des Modells
-    # 3. variable länge
-    # 4. segmentation durch matrixmult lösen
-    # 5. linepoint -(dense layer)-> shape of line -(attention)-> line
+    # 1. ParagrphBilder als ausschnitt aus größerem Bild
+    # 2. Zeilenhöhe wie zeilenwinkel festlegen
+    # 3. Goldlabel linepoint zu ungenau
+    # 4. model_lp gut machen
+    # 5. htr3: paragrph, lp -> flatten(conv(maxpooling(paragrph))+lp
+    # 5. variable länge
+    # 6. segmentation durch matrixmult lösen
+    # 7. code aufräumen & """""" für alle Methoden.
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
-    # TODO batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
+    # batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
     print("start")
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
-    #exit(0)
-    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    ds_plimg = Dataloader.img2lineimgDataset()  # Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
+    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.word, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    ds_plp.show(ds_plp.get_batch(20))
+    exit(0)
+    ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
     ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    #<test Dataloader.extractline>
-    if False:
-        batch = ds_plp.get_batch(10)
+    if True:  # test Dataloader.extractline
+        ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.linepositions)
+        batch = ds.get_batch(10)
         for i in range(len(batch[0])):
             (img, lp) = batch[0][i], batch[1][i]
             print("(img, lp) = ", Dataloader.getType((img, lp)))
-            ds_plp.show(([img], [lp]))
+            ds.show(([img], [lp]))
             limgs = [Dataloader.extractline(img, lp[il*5:(il+1)*5]) for il in range(len(lp)//5)]
             [cv2.imshow("line"+str(li), np.array(limgs[li], dtype="uint8")) for li in range(len(limgs))]
             cv2.waitKey(0)
         exit(0)
-    #</test>
 
-    if False:
-        for name in ["lp_conv2"]:  # , "lp_conv"
-            history = read_dict(name)
-            show_trainhistory(history, name)
-            infer(name, ds_plp)
-        external_seg("lp_conv", "htr", ds_ptxt)
+    if True:  # test model
+        for (name, ds) in [("lp_conv2", ds_plp), ("htr_mse(2)", ds_ltxt), ("lp_conv(2)", ds_plp)]:  # , "lp_conv"
+            #history = read_dict(name)
+            #show_trainhistory(history, name)
+            infer(name, ds)
+        external_seg("lp_conv2", "htr", ds_ptxt)
         #infer("htr", ds_ltxt)
         exit(0)
 
@@ -387,13 +390,6 @@ if __name__ == "__main__":
 
 
     #train all relevant models
-    #linefinder2
-    #model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
-    #train(model_conv, saveName="lp_conv", dataset=ds_plp, start_lr)
-    #model_linefinder2 = Models.linefinder2(model_conv, out_shape=linesshape)
-    #train(model_linefinder2, saveName="limg_linefinder2", dataset=ds_plimg, start_lr=0.0000001)
-    #del model_conv
-    #del model_linefinder2
 
     # linepoint
     model_conv2 = Models.conv2(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
@@ -408,7 +404,7 @@ if __name__ == "__main__":
     losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working
     for (loss, nm) in losses:
         model_htr = Models.htr(in_shape=ds_ltxt.imgsize, loss=loss)
-        train(model_htr, saveName="htr_mse"+nm, dataset=ds_ltxt, batch_size=64)
+        train(model_htr, saveName="htr"+nm, dataset=ds_ltxt, batch_size=64)
     print("finished training htr")
 
     exit(0)
@@ -421,6 +417,14 @@ if __name__ == "__main__":
     model_linefinder = Models.linefinder(in_shape=ds_plimg.imgsize, output_shape=linesshape)
     #model_linefinder.summary()  # 259,550 params < conv(256, 256)
     train(model_linefinder, saveName="linefinder", dataset=ds_plimg)
+
+    #linefinder2
+    #model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
+    #train(model_conv, saveName="lp_conv", dataset=ds_plp, start_lr)
+    #model_linefinder2 = Models.linefinder2(model_conv, out_shape=linesshape)
+    #train(model_linefinder2, saveName="limg_linefinder2", dataset=ds_plimg, start_lr=0.0000001)
+    #del model_conv
+    #del model_linefinder2
 
     #total
     model_total = Models.total(linefindermodel=model_linefinder, linereadermodel=model_htr)
