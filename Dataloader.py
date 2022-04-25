@@ -58,7 +58,7 @@ def extractline(img, linepoint: [float]):
     (h_img, w) = img.shape
     print("Dataloader.extractline: img.shape_prae = ", (h_img, w))
     linepoint = dense2linepoints(linepoint, x_size=(h_img, w))
-    #print("Datloader.extractline: linepoint = ", linepoint)
+    print("Datloader.extractline: linepoint = ", linepoint)
     #rotate image so that line is horizontal
     ((x1, y1), (x2, y2), h_lp) = linepoint[0]
     print("Dataloader.extractline: linepoint[0] = ", linepoint[0])
@@ -67,7 +67,7 @@ def extractline(img, linepoint: [float]):
         # <=> is empty  ((0, 0), (0, 0), 0) linepoint
         print("Dataloader.extractline: empty linepoint -> return black empty image")
         return np.zeros((32, 256))
-    if x1 < 0 or x1 > h_img or x2 < 0 or x2 > h_img or y1 < 0 or y1 > w or y2 < 0 or y2 > w:
+    if x1 < 0 or x1 > w or x2 < 0 or x2 > w or y1 < 0 or y1 > h_img or y2 < 0 or y2 > h_img:
         print("Dataloader.extractline: linepoint out of image -> return black empty image")
         return np.zeros((32, 256))
     if abs(y2-y1) > 1:  # line is not already horizontal
@@ -495,7 +495,7 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
             goldlabel = ''.join(goldlabel_list)
         elif goldlabel_type == GoldlabelTypes.linepositions:
             goldlabel = [((0, 0), (0, 0), 0)]*len(goldlabel_list)
-            offset = 0
+            offset = pad[0]
             for i_gl in range(len(goldlabel_list)):  # gl is list of points
                 #print("goldlabe_list[", i_gl, "] = ", str(goldlabel_list[i_gl]))
                 pre_gl = goldlabel_list[i_gl][0]  # (startpoint, endpoint, height)

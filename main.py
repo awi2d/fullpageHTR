@@ -357,15 +357,14 @@ if __name__ == "__main__":
     print("start")
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
-    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.word, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    ds_plp.show(ds_plp.get_batch(20))
-    exit(0)
+    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    #ds_plp.show(ds_plp.get_batch(10))
     ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
     ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
     if True:  # test Dataloader.extractline
-        ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.linepositions)
+        ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
         batch = ds.get_batch(10)
         for i in range(len(batch[0])):
             (img, lp) = batch[0][i], batch[1][i]
