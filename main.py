@@ -354,11 +354,11 @@ if __name__ == "__main__":
         #infer("htr", ds_ltxt)
         exit(0)
 
-
     #train all relevant models
-
     # linepoint
-    for (modelf, savename) in [(Models.cvff, "cvff"), (Models.conv, "conv"), (Models.conv2, "conv2")]:
+    for (modelf, savename) in [(Models.conv, "conv"), (Models.conv2, "conv2"), (Models.cvff, "cvff")]:
+        #history = read_dict(savename)
+        #show_trainhistory(history, savename)
         model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError())
         train(model, saveName=savename, dataset=ds_plp, batch_size=64)  # batch_size=128 führt zur "Allocation of 402653184 exceeds 10% of free system memory." warnung
         print("finished training "+savename)

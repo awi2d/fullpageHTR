@@ -935,8 +935,9 @@ class Dataset(abstractDataset):
         self.dataset_size = len(load_iam(self.data_directory, gl_type))
 
     def get_batch(self, size):
-        if self.add_empty_images:
-            assert size >= 3
+        add_empty_images = False
+        if size >= 6 and self.add_empty_images:
+            add_empty_images = True
             size = size-3  # drei leere bilder hinzugefuegt
         #select witch part of dset to use
         assert size < self.dataset_size
@@ -948,7 +949,7 @@ class Dataset(abstractDataset):
         #assert self.imgsize == data[0][0].shape  # assuming all images in data have the same size
         self.pos = self.pos+size
         # include empty images
-        if self.add_empty_images:
+        if add_empty_images:
             yshape = np.array(data[0][1]).shape  # data[0][1] might already be a np-array
             img = np.zeros(shape=self.imgsize, dtype="uint8")
             #gl = np.array([0]*len(data[0][1]))
