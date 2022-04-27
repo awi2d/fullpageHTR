@@ -211,6 +211,145 @@ def conv2(in_shape, out_length, activation='hard_sigmoid'):
     model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)
     return model
 
+#<copied from https://github.com/githubharald/CTCDecoder>
+
+def extend_by_blanks(seq, b):
+    """Extend a label seq. by adding blanks at the beginning, end and in between each label."""
+    res = [b]
+    for s in seq:
+        res.append(s)
+        res.append(b)
+    return res
+
+
+def word_to_label_seq(w, chars):
+    """Map a word (string of characters) to a sequence of labels (indices)."""
+    res = [chars.index(c) for c in w]
+    return res
+
+def recursive_probability(t, s, mat, labeling_with_blanks, blank, cache):
+    """Recursively compute probability of labeling,
+    save results of sub-problems in cache to avoid recalculating them."""
+
+    # check index of labeling
+    if s < 0:
+        return 0.0
+
+    # sub-problem already computed
+    if cache[t][s] is not None:
+        return cache[t][s]
+
+    # initial values
+    if t == 0:
+        if s == 0:
+            res = mat[0, blank]
+        elif s == 1:
+            res = mat[0, labeling_with_blanks[1]]
+        else:
+            res = 0.0
+
+        cache[t][s] = res
+        return res
+
+    # recursion on s and t
+    p1 = recursive_probability(t - 1, s, mat, labeling_with_blanks, blank, cache)
+    p2 = recursive_probability(t - 1, s - 1, mat, labeling_with_blanks, blank, cache)
+    res = (p1 + p2) * mat[t, labeling_with_blanks[s]]
+
+    # in case of a blank or a repeated label, we only consider s and s-1 at t-1, so we're done
+    if labeling_with_blanks[s] == blank or (s >= 2 and labeling_with_blanks[s - 2] == labeling_with_blanks[s]):
+        cache[t][s] = res
+        return res
+
+    # otherwise, in case of a non-blank and non-repeated label, we additionally add s-2 at t-1
+    p = recursive_probability(t - 1, s - 2, mat, labeling_with_blanks, blank, cache)
+    res += p * mat[t, labeling_with_blanks[s]]
+    cache[t][s] = res
+    return res
+
+
+def empty_cache(max_T, labeling_with_blanks):
+    """Create empty cache."""
+    return [[None for _ in range(len(labeling_with_blanks))] for _ in range(max_T)]
+
+
+def probability(mat: np.ndarray, gt: str, chars: str) -> float:
+    """Compute probability of ground truth text gt given neural network output mat.
+    See the CTC Forward-Backward Algorithm in Graves paper.
+    Args:
+        mat: Output of neural network of shape TxC.
+        gt: Ground truth text.
+        chars: The set of characters the neural network can recognize, excluding the CTC-blank.
+    Returns:
+        The probability of the text given the neural network output.
+    """
+
+    max_T, _ = mat.shape  # size of input matrix
+    blank = len(chars)  # index of blank label
+    labeling_with_blanks = extend_by_blanks(word_to_label_seq(gt, chars), blank)
+    cache = empty_cache(max_T, labeling_with_blanks)
+
+    p1 = recursive_probability(max_T - 1, len(labeling_with_blanks) - 1, mat, labeling_with_blanks, blank, cache)
+    p2 = recursive_probability(max_T - 1, len(labeling_with_blanks) - 2, mat, labeling_with_blanks, blank, cache)
+    p = p1 + p2
+    return p
+
+
+class CTCLoss_scheidel(tf.losses.Loss):
+    def __init__(self, alphabet):
+        super(CTCLoss_scheidel, self).__init__()
+        self.alphabet = alphabet
+
+    def call(self, y_true, y_pred):
+        """Compute loss of ground truth text gt given neural network output mat.
+        See the CTC Forward-Backward Algorithm in Graves paper.
+        Args:
+        mat: np.ndarray: Output of neural network of shape TxC.
+        gt: str: Ground truth text.
+        chars: str or list of chars: The set of characters the neural network can recognize, excluding the CTC-blank.
+        Returns:
+        The probability of the text given the neural network output.
+        """
+        try:
+            mat = y_pred
+            gt = y_true
+            chars = self.alphabet
+            return -np.log(probability(mat, gt, chars))
+        except ValueError:
+            return float('inf')
+#</copied from https://github.com/githubharald/CTCDecoder>
+#<copied from https://github.com/tensorflow/tensorflow/issues/35063>
+@tf.function(autograph=False)
+def get_labels(data):
+    def py_get_labels(y_true):
+        y_true = y_true.numpy().astype(np.int64)
+        label_length = np.array([i[-1] for i in y_true]).astype(np.int32)  # the labels length is codify in the target sequence
+        labels = np.zeros(
+            (len(label_length), np.max(label_length))).astype(np.int64)
+        for nxd, i in enumerate(y_true):
+            labels[nxd, :i[-1]] = i[:i[-1]].astype(np.int64)
+        return labels, label_length
+    return tf.py_function(py_get_labels, [data], (tf.int64, tf.int32))
+
+
+class CTCLoss_issus(tf.losses.Loss):
+    def __init__(self, logit_length, blank_index=0, logits_time_major=False):
+        super(CTCLoss_issus, self).__init__()
+        self.logit_length = tf.convert_to_tensor(logit_length)
+        self.blank_index = blank_index
+        self.logits_time_major = logits_time_major
+
+    def call(self, y_true, y_pred):
+        labels, label_length = get_labels(y_true)
+        print("Models.CTCLoss_issus: call labels=", Dataloader.getType(labels), ", label_length =", Dataloader.getType(label_length), ", y_true =", Dataloader.getType(y_true), ", y_pred =", Dataloader.getType(y_pred))
+        return tf.reduce_mean(tf.nn.ctc_loss(
+            labels=labels, logits=y_pred, label_length=label_length,
+            logit_length=self.logit_length,
+            logits_time_major=self.logits_time_major,
+            blank_index=self.blank_index
+        ))
+#</copied from https://github.com/tensorflow/tensorflow/issues/35063>
+
 def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation='relu'):
     """
     :param in_shape:
@@ -299,7 +438,7 @@ def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), loss=keras.loss
     # ====================== Conv n ======================
 
     current_shape = cnn.get_shape()
-    desieredshape = (None, 1, 64, 128)  # 1 to be wegReshaped, 64 = number of chars in output, 128 = ?number of LSTM cells in bidirectional = number of filters
+    desieredshape = (None, 1, in_shape[1]//2, 128)  # 1 to be wegReshaped, in_shape[1]//2 = number of labels in output > maximum number of chars in output, 128  = number of filters > len(alphabet)
     while current_shape[1] != desieredshape[1] or current_shape[2] != desieredshape[2]:
         print("current shape = ", current_shape)
         strides = (1, 1)

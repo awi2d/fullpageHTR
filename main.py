@@ -307,50 +307,16 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
         cv2.waitKey(0)
     return None
 
-#<copied from https://github.com/tensorflow/tensorflow/issues/35063>
-@tf.function(autograph=False)
-def get_labels(data):
-    def py_get_labels(y_true):
-        y_true = y_true.numpy().astype(np.int64)
-        label_length = np.array([i[-1] for i in y_true]).astype(np.int32)  # the labels length is codify in the target sequence
-        labels = np.zeros(
-            (len(label_length), np.max(label_length))).astype(np.int64)
-        for nxd, i in enumerate(y_true):
-            labels[nxd, :i[-1]] = i[:i[-1]].astype(np.int64)
-        return labels, label_length
-    return tf.py_function(py_get_labels, [data], (tf.int64, tf.int32))
-
-
-class CTCLoss(tf.losses.Loss):
-    def __init__(self, logit_length, blank_index=0, logits_time_major=False):
-        super(CTCLoss, self).__init__()
-        self.logit_length = tf.convert_to_tensor(logit_length)
-        self.blank_index = blank_index
-        self.logits_time_major = logits_time_major
-
-    def call(self, y_true, y_pred):
-        labels, label_length = get_labels(y_true)
-        print("main.CTCLoss: call labels=", Dataloader.getType(labels), ", label_length =", Dataloader.getType(label_length), ", y_true =", Dataloader.getType(y_true), ", y_pred =", Dataloader.getType(y_pred))
-        return tf.reduce_mean(tf.nn.ctc_loss(
-            labels=labels, logits=y_pred, label_length=label_length,
-            logit_length=self.logit_length,
-            logits_time_major=self.logits_time_major,
-            blank_index=self.blank_index
-        ))
-#</copied from https://github.com/tensorflow/tensorflow/issues/35063>
-
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
     # simpleHTR trainieren (auch wenn <5 MiB belegt)
     # 1. ParagrphBilder als ausschnitt aus größerem Bild
     # 2. Zeilenhöhe wie zeilenwinkel festlegen
-    # 3. Goldlabel linepoint zu ungenau
     # 4. model_lp gut machen
     # 5. htr3: paragrph, lp -> flatten(conv(maxpooling(paragrph))+lp
     # 5. variable länge
     # 6. segmentation durch matrixmult lösen
-    # 7. code aufräumen & """""" für alle Methoden.
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
     # batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
@@ -358,7 +324,8 @@ if __name__ == "__main__":
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    #ds_plp.show(ds_plp.get_batch(10))
+    ds_plp.show(10)
+    exit(0)
     ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
     ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)

@@ -21,11 +21,11 @@ class GoldlabelTypes:
     text = 0  # str the text that is written in the image, e.g. "A move to Stop mr. "
     linepositions = 1  # (start_of_line:(x:int, y:int), end_of_line:(x2:int, y2:int), height_of_line:int) all information needed to manually segment the line out of the image
     number_of_lines = 2  # int
-    #add new type: linemask: [image where exactly the pixels of line i are 1, everything else 0 for i in range(max(lines_per_paragrph))]
+    lineimg = 4  # list of all textlines, each with the same size (32x256), only supports dense encoding
+    # maybe add new type: linemask: [image where exactly the pixels of line i are 1, everything else 0 for i in range(max(lines_per_paragrph))]
     # attention layer maybe supports masking
     # masking may only support RNN and only one bool per timestamp https://www.tensorflow.org/guide/keras/custom_layers_and_models
     # image segmentation (NN that predicts label for each pixel) https://www.tensorflow.org/tutorials/images/segmentation
-    lineimg = 4  # list of all textlines, each with the same size (32x256), only supports dense encoding
 
 
 class GoldlabelEncodings:
@@ -34,20 +34,23 @@ class GoldlabelEncodings:
 
 
 class ImgTypes:
-    word = 20
-    line = 21
-    paragraph = 22
+    word = 20  # the image contains a single word
+    line = 21  # the image contains multiple words concatenated horizontally
+    paragraph = 22  # the image contains multiple lines concatenated vertically
 
 
 class DatasetNames:
     iam = 30
 
 
-def extractline(img, linepoint: [float]):
+def extractline(img, linepoint: [float], y_size = (32, 256)):
     """
     :param img:
     :param linepoint:
-    output from Dataloader.linepoints2dense
+    dense encoding of one linepoint
+    :param y_size:
+    (height of lineimg, widht of lineimg)
+    dimensions of the image returned by this function.
     :return:
     the normalised part of the image where the text line described by linepoint should be
     """
@@ -56,12 +59,13 @@ def extractline(img, linepoint: [float]):
 
     #print("Datloader.extractline: linepoint = ", linepoint)
     (h_img, w) = img.shape
-    print("Dataloader.extractline: img.shape_prae = ", (h_img, w))
+    #print("Dataloader.extractline: img.shape_prae = ", (h_img, w))
     linepoint = dense2linepoints(linepoint, x_size=(h_img, w))
-    print("Datloader.extractline: linepoint = ", linepoint)
+    #print("Datloader.extractline: linepoint = ", linepoint)
     #rotate image so that line is horizontal
     ((x1, y1), (x2, y2), h_lp) = linepoint[0]
-    print("Dataloader.extractline: linepoint[0] = ", linepoint[0])
+    h_lp = h_lp//2
+    #print("Dataloader.extractline: linepoint[0] = ", linepoint[0])
     # y1 == y2 => ist bereits gerade
     if abs(x2-x1)+abs(y2-y1) < 5 or h_lp < 2:
         # <=> is empty  ((0, 0), (0, 0), 0) linepoint
@@ -80,9 +84,9 @@ def extractline(img, linepoint: [float]):
     # cut line
     #cv2.imshow("rotated", img)
     #cv2.waitKey(0)
-    print("Dataloader.extractline: linepoint_rotated = ", ((x1, y1), (x2, y2), h_lp))
+    #print("Dataloader.extractline: linepoint_rotated = ", ((x1, y1), (x2, y2), h_lp))
     (h_img, w) = img.shape
-    print("Dataloader.extractline: img.shape_rot = ", (h_img, w))
+    #print("Dataloader.extractline: img.shape_rot = ", (h_img, w))
     y = int(0.5*y1+0.5*y2)  # y1 and y2 should already be almost the same
     #left_bound = max(0, int(x1-h_lp))
     #right_bound = min(h_img, int(x2+h_lp))
@@ -92,22 +96,28 @@ def extractline(img, linepoint: [float]):
     right_bound = max(0, int(x2+h_lp))
     upper_bound = max(0, int(y-h_lp))
     lower_bound = max(0, int(y+h_lp))
-    print("Dataloader.extractline: bounds = ", ((left_bound, right_bound), (upper_bound, lower_bound)))
-    a = cv2.line(img, (x1, y1), (x2, y2), 125, thickness=3)
-    a = cv2.rectangle(a, (left_bound, upper_bound), (right_bound, lower_bound), 125)
-    cv2.imshow("a", a)
-    cv2.waitKey(0)
+    #print("Dataloader.extractline: bounds = ", ((left_bound, right_bound), (upper_bound, lower_bound)))
+    #a = cv2.line(img, (x1, y1), (x2, y2), 125, thickness=3)
+    #a = cv2.rectangle(a, (left_bound, upper_bound), (right_bound, lower_bound), 125)
+    #cv2.imshow("a", a)
+    #cv2.waitKey(0)
     #img = np.array(img[left_bound:right_bound, upper_bound:lower_bound], dtype="uint8")
     img = np.array(img[upper_bound:lower_bound, left_bound:right_bound], dtype="uint8")
-    # scale image to hight of 32
-    print("Dataloader.extractline: img.shape_cutted = ", img.shape)
-    img = cv2.resize(img, (256, 32), interpolation=cv2.INTER_AREA)
+    #print("Dataloader.extractline: img.shape_cutted = ", img.shape)
+
+    # make img have correct shape without distorting it or losing information. maybe make this into seperate method
+    fitshape_then_cut(img, y_size)
     return img
 
 
 # <debug functions>
 
 def getType(x):
+    """
+    :param x:
+    :return:
+    a string containing information about the type of x
+    """
     deliminating_chars = {"list": ('[', ';', ']'), "tupel": ('<', ';', '>'), "dict": ('{', ';', '}')}
     name = type(x).__name__
     if name == 'list':
@@ -200,7 +210,6 @@ def test_tfds():
     goldlabel = np.array(goldlabel)
     return train_ds, goldlabel
 
-
 #</debug functions>
 
 
@@ -233,7 +242,7 @@ def sparse2num(a):
     return np.argmax(a)
 
 
-alphabet = np.array(["-", " ", ""]+list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!#"))  # "-" is ctc blank label, "#" is linebreak
+alphabet = np.array(["-", " "]+list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMOPQRSTUVWXYZ1234567890.,:;!#"))  # "-" is ctc blank label, "#" is linebreak
 def txt2sparse(txt, y_size:(int, int)):
     """
     :param txt:
@@ -258,7 +267,7 @@ def sparse2txt(sparse):
     return "".join(dense)
 
 
-def txt2dense(txt, y_size:int):
+def txt2dense(txt, y_size: int):
     """
     :param txt:
     :param y_size:
@@ -333,11 +342,31 @@ def dense2linepoints(points: [float], x_size:(int, int)) -> [line_point]:
 
 
 def lineimgs2dense(lineimgs, y_size):
-    return [cv2.resize(li, (y_size[1], y_size[0])) for li in lineimgs]
+    return [fitshape_then_cut(li, y_size) for li in lineimgs]
+    #return [cv2.resize(li, (y_size[1], y_size[0])) for li in lineimgs]
 def dense2lineimgs(lineimgs):
     return lineimgs
 # </encoding/decoding functions>
 
+
+def fitshape_then_cut(img, shape):
+    """
+    scales the img to be smaller than shape without distorting it, then pads img to correct size.
+    :param img:
+    an image
+    :param shape:
+    the shape the image will have after this operation
+    :return:
+    """
+    y_size = shape
+    if img.shape[0]/y_size[0] >= img.shape[1]/y_size[1]:
+        img = cv2.resize(img, (int(img.shape[1] * (y_size[0]/img.shape[0])), y_size[0]), interpolation=cv2.INTER_AREA)
+    else:
+        img = cv2.resize(img, (y_size[1], int(img.shape[0] * (y_size[1]/img.shape[1]))), interpolation=cv2.INTER_AREA)
+    img = np.pad(img, ((0, max(0, y_size[0]-img.shape[0])), (0, max(0, y_size[1]-img.shape[1]))), mode='constant', constant_values=255)
+    img = np.array(img[0:y_size[0], 0:y_size[1]], dtype="uint8")
+    assert (img.shape[0], img.shape[1]) == (shape[0], shape[1])
+    return img
 
 def scale(img, goldlabel, x_size, gl_type):
     """
@@ -429,7 +458,7 @@ def encode_and_pad(data, goldlabel_type, goldlabel_encoding, x_size=None, y_size
     # rescale to correct height, then cut/pad to correct width
     #data = [scale(img, gl, x_size=(x_size[0], None), gl_type=goldlabel_type) for (img, gl) in data]
     data = [cut(img, gl, x_size=x_size, gl_type=goldlabel_type) for (img, gl) in data]
-    print("Dataloader.encode_and_pad: aftercut_data.gl = ", [gl for (img, gl) in data])
+    #print("Dataloader.encode_and_pad: aftercut_data.gl = ", [gl for (img, gl) in data])
     if goldlabel_type == GoldlabelTypes.text:
         if goldlabel_encoding == GoldlabelEncodings.dense:
             print("dense text encoding is currently unsupported, return text in UTF-8 as goldlabel instead")
@@ -489,17 +518,17 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
     goldlabel = None
     if axis == 0:
         w = max([img.shape[1] for img in img_list])
-        # np.pad(np-array, ((oben, unten), (links, rechts)
+        # np.pad(np-array, ((oben, unten), (links, rechts))
         img_list = [np.pad(img_list[i], ((pad[i], 0), (0, w-img_list[i].shape[1])), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at right margin
         if goldlabel_type == GoldlabelTypes.text:
             goldlabel = ''.join(goldlabel_list)
         elif goldlabel_type == GoldlabelTypes.linepositions:
             goldlabel = [((0, 0), (0, 0), 0)]*len(goldlabel_list)
-            offset = pad[0]
+            offset = 0
             for i_gl in range(len(goldlabel_list)):  # gl is list of points
                 #print("goldlabe_list[", i_gl, "] = ", str(goldlabel_list[i_gl]))
                 pre_gl = goldlabel_list[i_gl][0]  # (startpoint, endpoint, height)
-                goldlabel[i_gl] = ((pre_gl[0][0], pre_gl[0][1]+offset), (pre_gl[1][0], pre_gl[1][1]+offset), pre_gl[2])
+                goldlabel[i_gl] = ((pre_gl[0][0], pre_gl[0][1]+offset+pad[i_gl]), (pre_gl[1][0], pre_gl[1][1]+offset+pad[i_gl]), pre_gl[2])
                 #offset += pad[i_gl]+pre_gl[2]
                 offset += img_list[i_gl].shape[0]
         elif goldlabel_type == GoldlabelTypes.lineimg:
@@ -680,22 +709,26 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
             line_para_winkel=(2, 5), lines_per_paragrph=[3, 4, 5]):
     """
     :param dir:
-    a directory that the dataset
+    a directory that contains the dataset
     :param dataset_name:
     the Name of the dataset that should be loaded and edited. (currently only iam supported)
     :param img_type:
+    element of ImgTypes. see there for documentation
     :param goldlabel_type:
+    element of GoldlabelTypes. see there for documentation
     :param goldlabel_encoding:
+    element of GoldlabelEncodings. see there for documentation
     :param x_size:
     np.array(x_value).shape == x_size will hold for all images in data returned by this function
     :param y_size:
     np.array(y_label).shape == y_size will hold for all y_label in data returned by this function
-    note that this has to be consistend the shape requered by max(lines_per_paragraph)*, gl_type and gl_encoding.
+    note that this has to be consistent the shape required by max(lines_per_paragraph), gl_type and gl_encoding.
     e.g. with gl_type==linepoints and gl_encoding==dense, y_size has to be a scalar greater or equal then linepoint_length*max(lines_per_paragraph)
     :param maxcount:
     number of examples in the return data
     len(data)  == maxcount will hold.
     :param offset:
+    from with wordimage in the iam-data to start
     :param line_para_winkel:
     all lines will get rotated by a random angel in degree or radiant in range(-line_para_winkel[0], line_para_winkel[0]+1)
     all paragraphs will get rotated by a random angel in degree or radiant in range(-line_para_winkel[1], line_para_winkel[1]+1)
@@ -703,7 +736,9 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
     list of what numbers of lines per paragraph are possible
     :return:
     data to train a tf.model on, but zipped
-    [(x_value, y_label)], where x_value is an image (concanated) from images in dataset_name
+    [(x_value, y_label)],
+    where x_value is an image maybe concanated from images in dataset_name
+    where y_label is the goldlabel as described in GoldlbaleTypes
     """
     #print("Dataloader.getData: ", "dir=", dir, "dataset_name=", dataset_name, "img_type=", img_type, "goldlabel_type=", goldlabel_type, "goldlabel_encoding=", goldlabel_encoding, "x_size=", x_size, "y_size=", y_size, "maxcount=", maxcount, "offset=", offset,"line_para_winkel=", line_para_winkel, "lines_per_paragrph=", lines_per_paragrph)
     #TODO check if dir exists and contains the correct data.
@@ -751,7 +786,7 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
     if goldlabel_type == GoldlabelTypes.lineimg:
         print("Dataloader.getData: y_size = ", y_size)
         data = [(path, load_img(dir+"/"+path)) for (path, gl) in data]  # load lineimg data
-        data = [(path, [cv2.resize(limg, (int(limg.shape[1] * (y_size[0]/limg.shape[0])), y_size[0]))]) for (path, limg) in data]  # resize lineimg to correct size
+        data = [(path, [cv2.resize(limg, (int(limg.shape[1] * (y_size[0]/limg.shape[0])), y_size[0]))]) for (path, limg) in data]  # resize lineimg to correct height
     data = [(load_img(dir+"/"+path), gl) for (path, gl) in data]
     data = [scale(img=img, goldlabel=gl, x_size=(line_height, None), gl_type=goldlabel_type) for (img, gl) in data]
     print("Dataloader.getData: imgword_gl: ", getType(data))
@@ -797,11 +832,17 @@ class abstractDataset:
     interface to the trainingdata.
     this has nothing to do with tf.Data.Dataset
     example use:
-    ds = Dataset(...)
-    model = Models.XXX(...)
+
+    ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.xxx, gl_type=Dataloader.GoldlabelTypes.xxx)
     for i in range(10):
         (x, y) = ds.getBatch(64)
-        model.fit(x=x, y=y, ...)
+        tfkerasmodel.fit(x, y)
+
+    or
+
+    ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.xxx, gl_type=Dataloader.GoldlabelTypes.xxx)
+    model = Models.xxx(input_shape=ds.imgsize, output_shape=ds.glsize)
+    train(model, saveName="model_trained_with_"+ds.name, dataset=ds, batch_size=32)
     """
     name = "TODO overwrite in subclasses"
     x = [float]
@@ -850,49 +891,6 @@ class RNNDataset(abstractDataset):
         for i in range(len(batch[0])):
             print(batch[0][i], "->", batch[1][i], "| ", predicted[i])
 
-class img2lineimgDataset(abstractDataset):
-    name = "img2lineimgDatset"
-    x = [[float]]
-    y = [[[float]]]
-
-    def __init__(self):
-        self.imgsize = (512, 1024)
-        self.lineszie = (32, 256)
-
-    def get_batch(self, n: int) -> ([x], [y]):
-        # type(batch) = (x:(n, w, h), y:(max_linecount, n, linesize[0], linesize[1]))
-        data = getData(dir=data_dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, goldlabel_type=GoldlabelTypes.lineimg, goldlabel_encoding=GoldlabelEncodings.dense, maxcount=n, line_para_winkel=(0, 0), x_size=self.imgsize, y_size=(32, 256))
-        x = []
-        y = [[] for _ in range(max([len(gl) for (img, gl) in data]))]
-        for (img, gl) in data:
-            x.append(img)
-            while len(gl) < len(y):
-                gl.append(np.zeros(self.lineszie))
-            for i in range(len(y)):
-                #print("Dataloader.img2lineimgDataset: gl[i].shape = ", gl[i].shape)
-                y[i].append(gl[i])
-        x_train = np.array(x)
-        y_train = [np.array(yn) for yn in y]
-        return x_train, y_train
-
-    def show(self, batch: ([x], [y]), predicted: [y] = None) -> None:
-        print("Dataloader.img2lineimgDataset: show batch = ", getType(batch), "\n pred = ", getType(predicted))
-        for batch_i in range(len(batch[0])):
-            (img, gl) = (batch[0][batch_i], [batch[1][line][batch_i] for line in range(len(batch[1]))])
-            img = np.array(img, dtype="uint8")
-            gl = [np.array(li, dtype="uint8") for li in gl]
-            cv2.imshow("image: ", img)
-            for gl_i in range(len(gl)):
-                cv2.imshow("lineimg:"+str(gl_i), gl[gl_i])
-            if predicted is not None:
-                for pred_i in range(len(predicted[batch_i])):
-                    pred = predicted[batch_i][pred_i]
-                    #pred = np.reshape(pred, (pred.shape[1], pred.shape[2]))
-                    pred = np.array([[max(min(255, t), 0)for t in tmp] for tmp in pred], dtype="uint8")
-                    cv2.imshow("predlineimg:"+str(pred_i), pred)
-
-            cv2.waitKey(0)
-
 
 class Dataset(abstractDataset):
     """
@@ -908,11 +906,10 @@ class Dataset(abstractDataset):
     max_chars_per_line = 32
     imgsize = {ImgTypes.word: (32, 64), ImgTypes.line: (32, 256), ImgTypes.paragraph: (512, 1024)}
     # TODO wenn glsiz[linepositions] >= 100 (d.h. 20 zeilen) stürzt das Programm nach "Dataloader.Dataset.show: start" ohne Fehlermeldung mit \"Process finished with exit code -1073740791 (0xC0000409)\" ab.
-    # TODO glsize has (no reason existing) or (may be activly worse) for text and linepoints.
-    #  It only makes sense for lineimgs.
     glsize = {GoldlabelTypes.text: None, GoldlabelTypes.linepositions: max(linecounts)*linepoint_length, GoldlabelTypes.lineimg: np.array((32, 256))}
     gl_encoding = {GoldlabelTypes.text: GoldlabelEncodings.onehot, GoldlabelTypes.linepositions: GoldlabelEncodings.dense, GoldlabelTypes.lineimg: GoldlabelEncodings.dense, GoldlabelTypes.number_of_lines: GoldlabelEncodings.dense}
     add_empty_images = True
+    # typehints seem not to work well with inheritance
     #super.x = [[float]]  # image
     #super.y = [float]  # linepoint
 
@@ -922,7 +919,7 @@ class Dataset(abstractDataset):
         self.img_type = img_type
         self.gl_type = gl_type
 
-        self.line_para_winkel = (0, 0)  # (3, 5)
+        self.line_para_winkel = (3, 5)
         self.do_not_fix_dimensions_just_flip = False
 
         self.gl_encoding = self.gl_encoding[self.gl_type]
@@ -947,6 +944,7 @@ class Dataset(abstractDataset):
             self.pos = self.pos % (self.dataset_size-size)
         print("Dataloader.Dataset.get_batch: self.glsize = ", self.glsize)
         data = getData(dir=self.data_directory, dataset_name=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize, y_size=self.glsize, lines_per_paragrph=self.linecounts)
+        # type of data: [(img, goldlabel)]
         #assert self.imgsize == data[0][0].shape  # assuming all images in data have the same size
         self.pos = self.pos+size
         # include empty images
@@ -977,6 +975,9 @@ class Dataset(abstractDataset):
         return x_train, y_train
 
     def show(self, batch, predicted=None):
+        if type(batch) == int:
+            batch = self.get_batch(batch)
+
         print("Dataloader.Dataset.show: start")
         assert len(batch[0]) == len(batch[1])
         batch = [(batch[0][i], batch[1][i]) for i in range(len(batch[0]))]
