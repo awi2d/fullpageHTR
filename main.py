@@ -310,13 +310,18 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
-    # simpleHTR trainieren (auch wenn <5 MiB belegt)
+    # 0. model_lp auf echten daten funktionieren machen
+    # 0. zeilen und word/zeile an echte Daten anpassen, model_lp dadrauf trainieren.
+    # neue NN ansätze:
+    # 1. bild as [[pixel]], mit pixel = (color, maske)
+    # 2. htr3: paragrph, lp -> flatten(conv(maxpooling(paragrph))+lp
+    # 3. htr: bild mit höhe = 5+zeilenhöhe -> tensor(5, zeilenlänge) ->  tensor(5, linepoint+zeilenlänge)
+    # 4. segmentation durch matrixmult lösen
+    # sonstiges
     # 1. ParagrphBilder als ausschnitt aus größerem Bild
     # 2. Zeilenhöhe wie zeilenwinkel festlegen
-    # 4. model_lp gut machen
-    # 5. htr3: paragrph, lp -> flatten(conv(maxpooling(paragrph))+lp
-    # 5. variable länge
-    # 6. segmentation durch matrixmult lösen
+    # 4. variable länge
+    # 5. zeilen beim ausschneiden linepoint auf schnittpunkt
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
     # batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
@@ -324,13 +329,11 @@ if __name__ == "__main__":
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    ds_plp.show(10)
-    exit(0)
-    ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
-    ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
-    ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
+    #ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
+    #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
+    #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    if True:  # test Dataloader.extractline
+    if False:  # test Dataloader.extractline
         ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
         batch = ds.get_batch(10)
         for i in range(len(batch[0])):
@@ -342,7 +345,7 @@ if __name__ == "__main__":
             cv2.waitKey(0)
         exit(0)
 
-    if True:  # test model
+    if False:  # test model
         for (name, ds) in [("lp_conv2", ds_plp), ("htr_mse(2)", ds_ltxt), ("lp_conv(2)", ds_plp)]:  # , "lp_conv"
             #history = read_dict(name)
             #show_trainhistory(history, name)
@@ -351,21 +354,17 @@ if __name__ == "__main__":
         #infer("htr", ds_ltxt)
         exit(0)
 
-    maxlinecount = 5  # duplicate max(lines_per_paragrph) in Dataloader.getData
-    linesshape = (maxlinecount, ds_ltxt.imgsize[0], ds_ltxt.imgsize[1])  # the lineshape of (32, 256) is hardcoded all over dataloader
-
 
     #train all relevant models
 
     # linepoint
-    model_conv2 = Models.conv2(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
-    train(model_conv2, saveName="lp_conv2", dataset=ds_plp, batch_size=32)
-    print("finished training conv2")
+    for (modelf, savename) in [(Models.cvff, "cvff"), (Models.conv, "conv"), (Models.conv2, "conv2")]:
+        model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError())
+        train(model, saveName=savename, dataset=ds_plp, batch_size=8)  # batch_size=128 führt zur "Allocation of 402653184 exceeds 10% of free system memory." warnung
+        print("finished training "+savename)
 
-    model_conv = Models.conv(in_shape=ds_plp.imgsize, out_length=maxlinecount*5)
-    train(model_conv, saveName="lp_conv", dataset=ds_plp, batch_size=32)
-    print("finished training conv")
 
+    exit(0)
     #htr
     losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working
     for (loss, nm) in losses:
@@ -375,7 +374,9 @@ if __name__ == "__main__":
 
     exit(0)
 
+
     # linefinder
+    #linesshape = (maxlinecount, ds_ltxt.imgsize[0], ds_ltxt.imgsize[1])
     # Process finished with exit code -1073740791 (0xC0000409)
     # while SSD-auslastung == 100%, arbeitsspeicherauslastung > 90%, cpu-auslastung zwieschen 10% und 100%
     # inklusive PC-freeze für 1min

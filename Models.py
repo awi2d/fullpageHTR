@@ -54,11 +54,12 @@ def fullyconnectedFedforward2(in_shape=(1000, 2000), out_length=6, activation='l
     return model
 
 
-def cvff(in_shape=(1000, 2000), out_length=5, activation="linear"):
+def cvff(in_shape=(1000, 2000), out_length=5, activation="linear", loss=keras.losses.MeanSquaredError()):
     #trainable params: ?
     activation_in = "relu"
     model = tf.keras.models.Sequential(name="cvff")
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
+    model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
     model.add(tf.keras.layers.Conv2D(3, (3, 3), strides=(1, 1), padding="same", activation=activation_in))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
     model.add(tf.keras.layers.Conv2D(3, (3, 3), strides=(1, 1), padding="same", activation=activation_in))
@@ -70,7 +71,7 @@ def cvff(in_shape=(1000, 2000), out_length=5, activation="linear"):
     model.add(tf.keras.layers.Dense(units=out_length*2, activation='relu'))
     model.add(tf.keras.layers.Dense(units=out_length, activation=activation))  # mit tanh aks activation in der letzen schicht funktioniert das nicht
     opt = tf.keras.optimizers.Adam(learning_rate=0.01, beta_1=0.5)  # learning rate should be unused
-    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)  # metrics=['mean_squared_error']
+    model.compile(loss=loss, optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
 
@@ -129,7 +130,7 @@ def vgg11(in_shape, out_length, activation="linear"):
     return model
 
 
-def conv(in_shape, out_length, activation='hard_sigmoid'):
+def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError()):
     # trainable parameters 23,316
     model = tf.keras.models.Sequential(name="conv")
 
@@ -169,12 +170,12 @@ def conv(in_shape, out_length, activation='hard_sigmoid'):
 
     # compile model
     opt = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.5)
-    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)  # metrics=['mean_squared_error']
+    model.compile(loss=loss, optimizer=opt)
     return model
 
 
-def conv2(in_shape, out_length, activation='hard_sigmoid'):
-    assert out_length % 5 == 0  # dense encoding of linepoint has 5 values
+def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError()):
+    assert out_length % Dataloader.linepoint_length == 0  # dense encoding of linepoint has 5 values
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
     cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
     cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(cnn)
@@ -189,30 +190,30 @@ def conv2(in_shape, out_length, activation='hard_sigmoid'):
         if current_shape[2] > target_shape[1]:
             strides = (strides[0], 2)
 
-        cnn = tf.keras.layers.Conv2D(filters=16, kernel_size=(5, 5), strides=(1, 1), padding="same")(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=16, kernel_size=(5, 5), strides=(1, 1), padding="same", activation="tanh")(cnn)
 
         cnn = tf.keras.layers.BatchNormalization()(cnn)
         cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
         cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
         current_shape = cnn.get_shape()
 
-    cnn = tf.keras.layers.Conv2D(filters=5, kernel_size=(9, 9), strides=(1, 1), padding="same")(cnn)
+    cnn = tf.keras.layers.Conv2D(filters=5, kernel_size=(9, 9), strides=(1, 1), padding="same", activation="tanh")(cnn)
     current_shape = cnn.get_shape()
     cnn = tf.keras.layers.Reshape((current_shape[1], current_shape[3]))(cnn)
-    attin = tf.keras.layers.Dense(units=out_length)(tf.keras.layers.Flatten()(cnn))
+    attin = tf.keras.layers.Dense(units=out_length, activation="relu")(tf.keras.layers.Flatten()(cnn))
     attin = tf.keras.layers.Reshape((out_length//5, 5))(attin)
 
     output_data = tf.keras.layers.Attention()([attin, cnn])
     output_data = tf.keras.layers.Flatten()(output_data)
-    output_data = tf.keras.layers.Dense(units=out_length)(output_data)
+    output_data = tf.keras.layers.Dense(units=out_length, activation=activation)(output_data)
 
     model = keras.Model(inputs=input_data, outputs=output_data, name="conv2")
     opt = tf.keras.optimizers.Adam(learning_rate=0.0003, beta_1=0.5)
-    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)
+    model.compile(loss=loss, optimizer=opt)
     return model
 
-#<copied from https://github.com/githubharald/CTCDecoder>
 
+#<copied from https://github.com/githubharald/CTCDecoder>
 def extend_by_blanks(seq, b):
     """Extend a label seq. by adding blanks at the beginning, end and in between each label."""
     res = [b]

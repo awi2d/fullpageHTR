@@ -10,8 +10,8 @@ import random
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 linepoint_length = 5
 
-#data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
-data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
+data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
 iam_dir = data_dir + "iam/"  # the unchanged iam dataset
 dataset_dir = data_dir + "generated/"  # directoy for storing generated data
 models_dir = data_dir + "models/"  # directoy for storing trained models
@@ -756,7 +756,7 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
 
     word_distance = [10, 20]  # padding added left of each word
     line_distance = [5, 10]  # padding added upward of each line
-    line_height = 32  # int(x_size[0]/max(lines_per_paragrph)-max(line_distance)-random.randint(0, 20))  # default height each word gets rescaled to before forming a line
+    line_height = int(x_size[0]/max(lines_per_paragrph)-max(line_distance)-random.randint(0, 20))  # default height each word gets rescaled to before forming a line
     # line_height is only used in word, line and paragrph_img, NOT in lineimg_goldlabel
 
     # TODO y_size[0] when goldlabel_type==text (a.k.a. max_chars_per_line) limit should be obeyed when building lines,
@@ -789,7 +789,7 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
         data = [(path, [cv2.resize(limg, (int(limg.shape[1] * (y_size[0]/limg.shape[0])), y_size[0]))]) for (path, limg) in data]  # resize lineimg to correct height
     data = [(load_img(dir+"/"+path), gl) for (path, gl) in data]
     data = [scale(img=img, goldlabel=gl, x_size=(line_height, None), gl_type=goldlabel_type) for (img, gl) in data]
-    print("Dataloader.getData: imgword_gl: ", getType(data))
+    #print("Dataloader.getData: imgword_gl: ", getType(data))
 
     # if goldlabel_type == text: type(data) = [(img: np.array(?, ?), text: string)]
     # if goldlabel_type == linepositions: type(data) = [(img: np.array(?, ?), linepoint: [1:linepoint: (start_of_line:(int, int), end_of_line:(int, int), height:int)])]
@@ -807,7 +807,7 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
     data = [rotate_img(img, gl, goldlabel_type, angle=random.randrange(-line_para_winkel[0], line_para_winkel[0]+1, 1)) for (img, gl) in data]
     #print("data_lines[0]: ", data[0])
     #print("data_imgline_goldlabel = ", data[:5])
-    print("Dataloader.getData: imgline_gl: ", getType(data))
+    #print("Dataloader.getData: imgline_gl: ", getType(data))
     if img_type == ImgTypes.line:  # line
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, x_size=x_size, y_size=y_size)
         print("Dataloader.getData: imglineenc_gl: ", getType(data))
@@ -819,10 +819,10 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
     #print("imgpara_gl: ", getType(data))
     # still correct lineimg
     #print("data_parag[0]: ", data[0])
-    print("Dataloader.getData: imgpara_goldlabel = ", getType(data))
+    #print("Dataloader.getData: imgpara_goldlabel = ", getType(data))
     if img_type == ImgTypes.paragraph:  # paragraph
         data = encode_and_pad(data, goldlabel_type, goldlabel_encoding, x_size=x_size, y_size=y_size)
-        print("Dataloader.getData: imgparaenc_gl: ", getType(data))
+        #print("Dataloader.getData: imgparaenc_gl: ", getType(data))
         return data
     return "Dataloader.getData: This return statement is impossible to reach."
 
@@ -938,11 +938,11 @@ class Dataset(abstractDataset):
         if self.add_empty_images:
             assert size >= 3
             size = size-3  # drei leere bilder hinzugefuegt
-        #selekt witch part of dset to use
+        #select witch part of dset to use
         assert size < self.dataset_size
         if self.pos+size >= self.dataset_size:
             self.pos = self.pos % (self.dataset_size-size)
-        print("Dataloader.Dataset.get_batch: self.glsize = ", self.glsize)
+        #print("Dataloader.Dataset.get_batch: self.glsize = ", self.glsize)
         data = getData(dir=self.data_directory, dataset_name=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize, y_size=self.glsize, lines_per_paragrph=self.linecounts)
         # type of data: [(img, goldlabel)]
         #assert self.imgsize == data[0][0].shape  # assuming all images in data have the same size
@@ -969,7 +969,7 @@ class Dataset(abstractDataset):
             x_train = np.array([np.transpose(img) for (img, gl) in data], dtype=float)
         else:
             x_train = np.array([img for (img, gl) in data], dtype=float)
-        print("Dataloader.Dataset.get_batch: data.gl = ", [getType(gl) for (img, gl) in data])
+        #print("Dataloader.Dataset.get_batch: data.gl = ", [getType(gl) for (img, gl) in data])
         y_train = np.array([gl for (img, gl) in data], dtype=float)
         #return tf.data.Dataset.from_tensor_slices((x_train, y_train))  # maybe using this could be more efficent
         return x_train, y_train
@@ -1011,7 +1011,7 @@ class Dataset(abstractDataset):
                 for point in predPoints:
                     cv2.circle(img, point[0], radius=int(point[2]/2), color=125, thickness=2)
                     cv2.rectangle(img, (point[0][0]-5, point[0][1]-5), (point[0][0]+5, point[0][1]+5), 125, 1)
-                    cv2.circle(img, point[1], int(point[2]/2), 125, 2)
+                    cv2.circle(img, point[1], point[2]//2, 125, 2)
                     cv2.line(img, point[0], point[1], 125, thickness=2)
                 cv2.imshow(str(gl), img)
                 cv2.waitKey(0)
