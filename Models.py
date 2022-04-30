@@ -109,17 +109,16 @@ def vgg11(in_shape, out_length, activation="linear"):
     return model
 
 
-def cvff(in_shape=(512, 1024), out_length=5, activation="linear", loss=keras.losses.MeanSquaredError()):
+def cvff(in_shape=(512, 1024), out_length=5, activation="linear", loss=keras.losses.MeanSquaredError(), inner_activation="relu"):
     #trainable params: ?
-    activation_in = "relu"
     model = tf.keras.models.Sequential(name="cvff")
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # grayscale image has values in list(range(255))
     model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
-    model.add(tf.keras.layers.Conv2D(5, (3, 3), strides=(1, 1), padding="same", activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(5, (3, 3), strides=(1, 1), padding="same", activation=inner_activation))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
-    model.add(tf.keras.layers.Conv2D(10, (3, 3), strides=(1, 1), padding="same", activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(10, (3, 3), strides=(1, 1), padding="same", activation=inner_activation))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
-    model.add(tf.keras.layers.Conv2D(15, (3, 3), strides=(1, 1), padding="same", activation=activation_in))
+    model.add(tf.keras.layers.Conv2D(15, (3, 3), strides=(1, 1), padding="same", activation=inner_activation))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Dense(units=out_length*3, activation='relu'))
@@ -130,52 +129,40 @@ def cvff(in_shape=(512, 1024), out_length=5, activation="linear", loss=keras.los
     return model
 
 
-def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError()):
+def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError(), inner_activation="tanh"):
     # trainable parameters 23,316
+
     model = tf.keras.models.Sequential(name="conv")
     model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # rescale img to [0, 1]
+    #model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # rescale img to [-1, 1]
     model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
 
     # Layer 1 Conv2D
-    # model.add(Dropout(0.2, input_shape=input_shape))
-    #model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # rescale img to [-1, 1]
-    model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", activation='tanh', input_shape=in_shape))
+    model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", activation=inner_activation, input_shape=in_shape))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
-    model.add(tf.keras.layers.Dropout(0.4))
-
-    # Layer 2 Pooling Layer
+    model.add(tf.keras.layers.Dropout(0.1))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
-    model.add(tf.keras.layers.Dropout(0.4))
+
+    # Layer 2 Conv2D
+    model.add(tf.keras.layers.Conv2D(18, (5, 5), strides=(1, 1), padding="same", activation=inner_activation))
+    model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
+    model.add(tf.keras.layers.Dropout(0.1))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
 
     # Layer 3 Conv2D
-    model.add(tf.keras.layers.Conv2D(18, (5, 5), strides=(1, 1), padding="same", activation='tanh'))  #
+    model.add(tf.keras.layers.Conv2D(18, (5, 5), strides=(1, 1), padding="same", activation=inner_activation))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
-    model.add(tf.keras.layers.Dropout(0.4))
-    # model.add(BatchNormalization())
-
-    # Layer 3 Pooling Layer
+    model.add(tf.keras.layers.Dropout(0.1))
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
-    model.add(tf.keras.layers.Dropout(0.4))
 
     # Layer 4 Conv2D
-    model.add(tf.keras.layers.Conv2D(18, (5, 5), strides=(1, 1), padding="same", activation='tanh'))  #
-    model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
-    model.add(tf.keras.layers.Dropout(0.4))
-    # model.add(BatchNormalization())
-
-    # Layer 4 Pooling Layer
-    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
-    model.add(tf.keras.layers.Dropout(0.4))
-
-    # Layer 5 Conv2D
     model.add(tf.keras.layers.Conv2D(12, kernel_size=(5, 5), strides=(1, 1), padding="same", activation='tanh'))
-
-    # Layer 5 Pooling Layer
     model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
 
+    # Layer 5 Dense
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(units=120, activation='tanh'))
-    model.add(tf.keras.layers.Dense(units=84, activation='tanh'))
+    model.add(tf.keras.layers.Dense(units=120, activation="relu"))
+    model.add(tf.keras.layers.Dense(units=84, activation="relu"))
     model.add(tf.keras.layers.Dense(units=out_length, activation=activation))
 
     # compile model
@@ -184,7 +171,7 @@ def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mean
     return model
 
 
-def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError()):
+def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError(), inner_activation="relu"):
     assert out_length % Dataloader.linepoint_length == 0  # dense encoding of linepoint has 5 values
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
     cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
@@ -192,6 +179,7 @@ def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mea
 
     target_shape = (2*out_length, 1)  # reduce width of image to 1 => (list of image rows -> list of linepoints)
     current_shape = cnn.get_shape()
+    attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
     while current_shape[1] >= 2*target_shape[0] or current_shape[2] >= 2*target_shape[1]:
         #print("current shape = ", current_shape)
         strides = (1, 1)
@@ -200,25 +188,28 @@ def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mea
         if current_shape[2] >= 2*target_shape[1]:
             strides = (strides[0], 2)
 
-        cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(5, 5), strides=(1, 1), padding="same", activation="relu")(cnn)  # tanh hat nicht funktioniert
-        cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(5, 5), strides=(1, 1), padding="same", activation="relu")(cnn)
-        cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(5, 5), strides=(1, 1), padding="same", activation="relu")(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
+        cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
+        attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
+        attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
 
-        #cnn = tf.keras.layers.BatchNormalization()(cnn)
-        cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
+        #cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
         cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
+        attin_prae = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(attin_prae)
         current_shape = cnn.get_shape()
 
     current_shape = cnn.get_shape()  # (None, >=out_length*2, 1, 32)
     #print("current shape = ", current_shape)
     cnn = tf.keras.layers.Reshape((current_shape[1], current_shape[3]))(cnn)
-    attin = tf.keras.layers.Dense(units=out_length//5*current_shape[3], activation="relu")(tf.keras.layers.Flatten()(cnn))
+    attin = tf.keras.layers.Dense(units=out_length//5*current_shape[3], activation="relu")(tf.keras.layers.Flatten()(attin_prae))
     attin = tf.keras.layers.Reshape((out_length//5, current_shape[3]))(attin)
 
     attention_out = tf.keras.layers.Attention()([attin, cnn])
     #output_data = tf.keras.layers.Conv2D(filters=5, kernel_size=(9, 9), strides=(1, 1), padding="same", activation="tanh")(tf.keras.layers.Reshape((attention_out.get_shape()[1], attention_out.get_shape()[2], 1))(attention_out))
     output_data = tf.keras.layers.Flatten()(attention_out)
-    output_data = tf.keras.layers.Dense(units=2*out_length, activation="relu")(output_data)
+    output_data = tf.keras.layers.Dense(units=output_data.get_shape()[1], activation="relu")(output_data)
+    output_data = tf.keras.layers.Dense(units=out_length*4, activation="relu")(output_data)
     output_data = tf.keras.layers.Dense(units=out_length, activation=activation)(output_data)
 
     model = keras.Model(inputs=input_data, outputs=output_data, name="conv2")

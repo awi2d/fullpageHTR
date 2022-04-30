@@ -356,13 +356,15 @@ if __name__ == "__main__":
 
     #train all relevant models
     # linepoint
-    for (modelf, savename) in [(Models.conv, "conv"), (Models.conv2, "conv2"), (Models.cvff, "cvff")]:
-        #history = read_dict(savename)
-        #show_trainhistory(history, savename)
-        model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError())
-        train(model, saveName=savename, dataset=ds_plp, batch_size=32)  # batch_size=128 führt zur "Allocation of 402653184 exceeds 10% of free system memory." warnung
-        print("finished training "+savename)
-
+    for (modelf, modeln) in [(Models.conv2, "conv2"), (Models.conv, "conv"), (Models.cvff, "cvff")]:
+        for inner_activation in ["tanh", "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
+            savename = modeln+"-"+inner_activation
+            #history = read_dict(savename)
+            #show_trainhistory(history, savename)
+            model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
+            train(model, saveName=savename, dataset=ds_plp, batch_size=32)  # batch_size=128 führt zur "Allocation of 402653184 exceeds 10% of free system memory." warnung
+            del model  # model parameters gets saved by train
+            print("finished training "+savename)
 
     exit(0)
     #htr
