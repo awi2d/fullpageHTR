@@ -355,20 +355,24 @@ if __name__ == "__main__":
         exit(0)
 
     #train all relevant models
-    model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation="tanh")
-    train(model, saveName="conv2_tanh_hard_sigmoid", dataset=ds_plp, batch_size=16)
-    exit(0)
+    # training one model works fine.
+    # training multiply models sequentially throus OOM before starting to execute my code.
+    #model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation="tanh")
+    #train(model, saveName="conv2_tanh_hard_sigmoid", dataset=ds_plp, batch_size=16)
+    #exit(0)
     # linepoint
-    #for (modelf, modeln) in [(Models.conv2, "conv2"), (Models.conv, "conv"), (Models.cvff, "cvff")]:
-    #    for inner_activation in ["tanh", "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
-    #        savename = modeln+"_"+inner_activation+"_hard_sigmoid"
-    #        print("start training", savename)
+    # https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
+    for (modelf, modeln) in [(Models.conv2, "conv2"), (Models.conv, "conv"), (Models.cvff, "cvff")]:
+        for inner_activation in ["tanh", "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
+            savename = modeln+"_"+inner_activation+"_hard_sigmoid"
+            print("start training"+savename)
             #history = read_dict(savename)
             #show_trainhistory(history, savename)
-    #        model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-    #        train(model, saveName=savename, dataset=ds_plp, batch_size=16)
-    #        del model  # model parameters gets saved by train
-    #        print("finished training "+savename)
+            model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
+            train(model, saveName=savename, dataset=ds_plp, batch_size=16)
+            del model  # model parameters gets saved by train
+            tf.keras.backend.clear_session()
+            print("finished training "+savename)
 
     exit(0)
     #htr
