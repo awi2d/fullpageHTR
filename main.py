@@ -362,7 +362,7 @@ if __name__ == "__main__":
             #history = read_dict(savename)
             #show_trainhistory(history, savename)
             model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-            train(model, saveName=savename, dataset=ds_plp, batch_size=32)  # batch_size=128 führt zur "Allocation of 402653184 exceeds 10% of free system memory." warnung
+            train(model, saveName=savename, dataset=ds_plp, batch_size=16)
             del model  # model parameters gets saved by train
             print("finished training "+savename)
 

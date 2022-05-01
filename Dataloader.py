@@ -18,7 +18,7 @@ models_dir = data_dir + "models/"  # directoy for storing trained models
 
 
 class GoldlabelTypes:
-    text = 0  # str the text that is written in the image, e.g. "A move to Stop mr. "
+    text = 0  # str the text that is written in the image, e.g. "A move to Stop mr. Gaitskell from nominating any more labour life peers is to be made at a meeting"
     linepositions = 1  # (start_of_line:(x:int, y:int), end_of_line:(x2:int, y2:int), height_of_line:int) all information needed to manually segment the line out of the image
     number_of_lines = 2  # int
     lineimg = 4  # list of all textlines, each with the same size (32x256), only supports dense encoding
