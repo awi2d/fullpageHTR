@@ -355,10 +355,25 @@ if __name__ == "__main__":
         exit(0)
 
     #train all relevant models
-    # linepoint
+    gpus = tf.config.list_physical_devices('GPU')
+    print("main.main: gpus = ", gpus)
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print("Memory growth must be set before GPUs have been initialized")
+            print(e)
+
+        # linepoint
     for (modelf, modeln) in [(Models.conv2, "conv2"), (Models.conv, "conv"), (Models.cvff, "cvff")]:
         for inner_activation in ["tanh", "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
             savename = modeln+"-"+inner_activation
+            print("start training", savename)
             #history = read_dict(savename)
             #show_trainhistory(history, savename)
             model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
