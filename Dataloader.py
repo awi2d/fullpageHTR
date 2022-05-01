@@ -1002,6 +1002,7 @@ class Dataset(abstractDataset):
                 print("Dataloader.Dataset.show: linepoint: points = ", points)
                 if predicted is not None:
                     predPoints = decode_func(predicted[i], x_size=(h, w))
+                    print("Dataloader.Dataset.show: linepoint: predpt = ", predPoints)
                 for point in points:
                     #print("point = ", point)
                     #point = ((max(1, int(point[0][0])), max(1, int(point[0][1]))), (max(1, int(point[1][0])), max(1, int(point[1][1]))), max(1, int(point[2])))

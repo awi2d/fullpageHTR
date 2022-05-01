@@ -204,7 +204,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
             break
     dt = time.time() - start_time
     history["trainingtime"] = [dt]
-    print("\n", saveName, " took ", dt, "s to fit")
+    print("\n", saveName, " took ", dt, "s to fit to val_loss of ", best_model[0])
 
     # print("len(history[loss]) = ", len(history['loss']))
     # print("len(history[val_loss]) = ", len(history['val_loss']))
@@ -237,13 +237,15 @@ def infer(name, dataset):
         #    print("validation image has to be the same size or smaler than largest training image")
         #    return None
         pred = model.predict([img])  # returns list of predictions.
-        print("infer: ", Dataloader.getType(img), " -> ", Dataloader.getType(pred))
+        if len(infered) == 0:
+            print("main.infer: ", Dataloader.getType(img), " -> ", Dataloader.getType(pred))
+        print("main.infer: pred = ", str(pred).replace("\t", " ").replace("\n", " ").replace("         ", " "))
         shape = tuple([x for x in np.array(pred).shape if x > 1])
         pred = np.reshape(pred, shape)
         infered.append(pred)
         # img is of type float, cv2 needs type int to show.
     # test_x = dataset.show((test_x, test_y))
-    dataset.show((test_x, test_y), infered)
+    #dataset.show((test_x, test_y), infered)
 
     # test_x = [np.pad(img, ((0, input_size[0]-img.shape[0]), (0, input_size[1]-img.shape[1])), mode='constant', constant_values=255) for img in test_x]
     # print("test_x: ", type(test_x[0]))
@@ -325,7 +327,7 @@ if __name__ == "__main__":
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
     # batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
-    print("start")
+    print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
@@ -346,7 +348,8 @@ if __name__ == "__main__":
         exit(0)
 
     if False:  # test model
-        for (name, ds) in [("lp_conv2", ds_plp), ("htr_mse(2)", ds_ltxt), ("lp_conv(2)", ds_plp)]:  # , "lp_conv"
+        for (name, ds) in [("conv2_tanh_hard_sigmoid", ds_plp), ("conv2_relu_hard_sigmoid", ds_plp), ("conv2_elu_hard_sigmoid", ds_plp)]:  # , "lp_conv"
+            print("infer: "+name)
             #history = read_dict(name)
             #show_trainhistory(history, name)
             infer(name, ds)
@@ -357,17 +360,15 @@ if __name__ == "__main__":
     #train all relevant models
     # training one model works fine.
     # training multiply models sequentially throus OOM before starting to execute my code.
-    model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation="tanh")
-    train(model, saveName="conv2_tanh_hard_sigmoid", dataset=ds_plp, batch_size=16)
-    exit(0)
+    #model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation="tanh")
+    #train(model, saveName="conv2_tanh_hard_sigmoid", dataset=ds_plp, batch_size=16)
+    #exit(0)
     # linepoint
     # https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
     for (modelf, modeln) in [(Models.conv2, "conv2"), (Models.conv, "conv"), (Models.cvff, "cvff")]:
-        for inner_activation in ["tanh", "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
+        for inner_activation in ["tanh"]:  # , "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
             savename = modeln+"_"+inner_activation+"_hard_sigmoid"
             print("start training"+savename)
-            #history = read_dict(savename)
-            #show_trainhistory(history, savename)
             model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
             train(model, saveName=savename, dataset=ds_plp, batch_size=16)
             del model  # model parameters gets saved by train
