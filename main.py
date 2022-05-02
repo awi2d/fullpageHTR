@@ -349,7 +349,7 @@ if __name__ == "__main__":
             cv2.waitKey(0)
         exit(0)
 
-    if True:  # test model
+    if False:  # test model
         for (name, ds) in [("test2_cvff_relu_hard_sigmoid", ds_plp), ("test2_conv2_relu_hard_sigmoid", ds_plp), ("test2_conv_relu_hard_sigmoid", ds_plp)]:  # , "lp_conv"
             print("infer: "+name)
             history = read_dict(name)
