@@ -137,8 +137,8 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
     valLoss = 1
     x_train, y_train = dataset.get_batch(batch_size)
     epochcount = 0
-    long_epochs = 64
-    short_epochs = 2
+    long_epochs = 128
+    short_epochs = 4
     best_model = (valLoss, model.get_weights())
 
     # train
@@ -190,15 +190,15 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
             best_model = (valLoss, model.get_weights())
         print(str(epochs_without_improvment) + "ES", end=' ')
         # testen ob training abgebrochen werden kann
-        if lr < 0.000001:  # lr == 0 -> keine veränderung -> weitertrainieren ist zeitverschwendung
+        if lr < 0.00000001:  # lr == 0 -> keine veränderung -> weitertrainieren ist zeitverschwendung
             history["trainstop"] = ["lr = " + str(lr)]
             print("learning rate to low, stop training " + saveName)
             break
-        if epochs_without_improvment > long_epochs*3:
+        if epochs_without_improvment > long_epochs*8:
             history["trainstop"] = ["epochs_without_imporvment = " + str(epochs_without_improvment)]
             print("no imprevment of val_loss, stop training " + saveName)
             break
-        if epochcount >= 1000:
+        if epochcount >= 16000:
             history["trainstop"] = ["epochcount = " + str(epochcount)]
             print("end of loop reached, stop training " + saveName)
             break
@@ -349,15 +349,6 @@ if __name__ == "__main__":
             cv2.waitKey(0)
         exit(0)
 
-    if False:  # test model
-        for (name, ds) in [("test2_cvff_relu_hard_sigmoid", ds_plp), ("test2_conv2_relu_hard_sigmoid", ds_plp), ("test2_conv_relu_hard_sigmoid", ds_plp)]:  # , "lp_conv"
-            print("infer: "+name)
-            history = read_dict(name)
-            show_trainhistory(history, name)
-            infer(name, ds)
-        #external_seg("lp_conv2", "htr", ds_ptxt)
-        #infer("htr", ds_ltxt)
-        exit(0)
 
     #train all relevant models
     # training one model works fine.
@@ -367,17 +358,22 @@ if __name__ == "__main__":
     #exit(0)
     # linepoint
     # https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
-    for (modelf, modeln) in [(Models.conv, "conv"), (Models.cvff, "cvff")]:  # (Models.conv2, "conv2")
+    for (modelf, modeln) in [(Models.conv, "conv"), (Models.conv2, "conv2")]:  # (Models.conv2, "conv2")
         for inner_activation in ["relu"]:  # , "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
             final_activation = "hard_sigmoid"
             savename = f"{ds_plp.name}_{modeln}_{inner_activation}_{final_activation}"
-            print("start training "+savename)
-            model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-            #model.summary()
-            train(model, saveName=savename, dataset=ds_plp, batch_size=128)
-            del model  # model parameters gets saved by train
-            tf.keras.backend.clear_session()
-            print("finished training "+savename)
+            if False:
+                print("infer: "+savename)
+                history = read_dict(savename)
+                show_trainhistory(history, savename)
+                infer(savename, ds_plp)
+            else:
+                print("start training "+savename)
+                model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
+                train(model, saveName=savename, dataset=ds_plp, batch_size=256)
+                del model  # model parameters gets saved by train
+                tf.keras.backend.clear_session()
+                print("finished training "+savename)
 
     exit(0)
     #htr

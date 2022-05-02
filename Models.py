@@ -137,27 +137,28 @@ def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mean
     #model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # rescale img to [-1, 1]
     model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
 
+    pool_size = (3, 3)  # (2, 2)
     # Layer 1 Conv2D
     model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", activation=inner_activation, input_shape=in_shape))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
     model.add(tf.keras.layers.Dropout(0.1))
-    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=(2, 2), padding='valid'))
 
     # Layer 2 Conv2D
     model.add(tf.keras.layers.Conv2D(18, (5, 5), strides=(1, 1), padding="same", activation=inner_activation))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
     model.add(tf.keras.layers.Dropout(0.1))
-    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=(2, 2), padding='valid'))
 
     # Layer 3 Conv2D
     model.add(tf.keras.layers.Conv2D(18, (5, 5), strides=(1, 1), padding="same", activation=inner_activation))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
     model.add(tf.keras.layers.Dropout(0.1))
-    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=(2, 2), padding='valid'))
 
     # Layer 4 Conv2D
-    model.add(tf.keras.layers.Conv2D(12, kernel_size=(5, 5), strides=(1, 1), padding="same", activation='tanh'))
-    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.Conv2D(12, kernel_size=(5, 5), strides=(1, 1), padding="same", activation=inner_activation))
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=(2, 2), padding='valid'))
 
     # Layer 5 Dense
     model.add(tf.keras.layers.Flatten())
@@ -191,11 +192,13 @@ def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mea
         cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
         cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
         cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
+        cnn = tf.keras.layers.LeakyReLU(alpha=0.2)(cnn)
         #attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
         #attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
 
         #cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
         cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
+        cnn = tf.keras.layers.Dropout(0.1)(cnn)
         #attin_prae = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(attin_prae)
         current_shape = cnn.get_shape()
 
