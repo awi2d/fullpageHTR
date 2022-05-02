@@ -245,7 +245,7 @@ def infer(name, dataset):
         infered.append(pred)
         # img is of type float, cv2 needs type int to show.
     # test_x = dataset.show((test_x, test_y))
-    #dataset.show((test_x, test_y), infered)
+    dataset.show((test_x, test_y), infered)
 
     # test_x = [np.pad(img, ((0, input_size[0]-img.shape[0]), (0, input_size[1]-img.shape[1])), mode='constant', constant_values=255) for img in test_x]
     # print("test_x: ", type(test_x[0]))
@@ -330,10 +330,12 @@ if __name__ == "__main__":
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
-    ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
+    #ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
     #ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
     #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
+
+    ds_plp = Dataloader.Dataset_test(2)
 
     if False:  # test Dataloader.extractline
         ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
@@ -347,13 +349,13 @@ if __name__ == "__main__":
             cv2.waitKey(0)
         exit(0)
 
-    if False:  # test model
-        for (name, ds) in [("conv2_tanh_hard_sigmoid", ds_plp), ("conv2_relu_hard_sigmoid", ds_plp), ("conv2_elu_hard_sigmoid", ds_plp)]:  # , "lp_conv"
+    if True:  # test model
+        for (name, ds) in [("test2_cvff_relu_hard_sigmoid", ds_plp), ("test2_conv2_relu_hard_sigmoid", ds_plp), ("test2_conv_relu_hard_sigmoid", ds_plp)]:  # , "lp_conv"
             print("infer: "+name)
-            #history = read_dict(name)
-            #show_trainhistory(history, name)
+            history = read_dict(name)
+            show_trainhistory(history, name)
             infer(name, ds)
-        external_seg("lp_conv2", "htr", ds_ptxt)
+        #external_seg("lp_conv2", "htr", ds_ptxt)
         #infer("htr", ds_ltxt)
         exit(0)
 
@@ -365,12 +367,14 @@ if __name__ == "__main__":
     #exit(0)
     # linepoint
     # https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
-    for (modelf, modeln) in [(Models.conv2, "conv2"), (Models.conv, "conv"), (Models.cvff, "cvff")]:
-        for inner_activation in ["tanh"]:  # , "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
-            savename = modeln+"_"+inner_activation+"_hard_sigmoid"
-            print("start training"+savename)
-            model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-            train(model, saveName=savename, dataset=ds_plp, batch_size=16)
+    for (modelf, modeln) in [(Models.conv, "conv"), (Models.cvff, "cvff")]:  # (Models.conv2, "conv2")
+        for inner_activation in ["relu"]:  # , "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
+            final_activation = "hard_sigmoid"
+            savename = f"{ds_plp.name}_{modeln}_{inner_activation}_{final_activation}"
+            print("start training "+savename)
+            model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
+            #model.summary()
+            train(model, saveName=savename, dataset=ds_plp, batch_size=128)
             del model  # model parameters gets saved by train
             tf.keras.backend.clear_session()
             print("finished training "+savename)

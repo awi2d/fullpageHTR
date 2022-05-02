@@ -179,7 +179,7 @@ def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mea
 
     target_shape = (2*out_length, 1)  # reduce width of image to 1 => (list of image rows -> list of linepoints)
     current_shape = cnn.get_shape()
-    attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
+    #attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
     while current_shape[1] >= 2*target_shape[0] or current_shape[2] >= 2*target_shape[1]:
         #print("current shape = ", current_shape)
         strides = (1, 1)
@@ -191,21 +191,22 @@ def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mea
         cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
         cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
         cnn = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(cnn)
-        attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
-        attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
+        #attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
+        #attin_prae = tf.keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(1, 1), padding="same", activation=inner_activation)(attin_prae)
 
         #cnn = tf.keras.layers.LeakyReLU(alpha=0.01)(cnn)
         cnn = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(cnn)
-        attin_prae = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(attin_prae)
+        #attin_prae = tf.keras.layers.MaxPooling2D(pool_size=strides, strides=strides, padding="valid")(attin_prae)
         current_shape = cnn.get_shape()
 
     current_shape = cnn.get_shape()  # (None, >=out_length*2, 1, 32)
     #print("current shape = ", current_shape)
     cnn = tf.keras.layers.Reshape((current_shape[1], current_shape[3]))(cnn)
-    attin = tf.keras.layers.Dense(units=out_length//5*current_shape[3], activation="relu")(tf.keras.layers.Flatten()(attin_prae))
-    attin = tf.keras.layers.Reshape((out_length//5, current_shape[3]))(attin)
+    #attin = tf.keras.layers.Dense(units=out_length//5*current_shape[3], activation="relu")(tf.keras.layers.Flatten()(attin_prae))
+    #attin = tf.keras.layers.Reshape((out_length//5, current_shape[3]))(attin)
 
-    attention_out = tf.keras.layers.Attention()([attin, cnn])
+    #attention_out = tf.keras.layers.Attention()([attin, cnn])
+    attention_out = cnn
     #output_data = tf.keras.layers.Conv2D(filters=5, kernel_size=(9, 9), strides=(1, 1), padding="same", activation="tanh")(tf.keras.layers.Reshape((attention_out.get_shape()[1], attention_out.get_shape()[2], 1))(attention_out))
     output_data = tf.keras.layers.Flatten()(attention_out)
     output_data = tf.keras.layers.Dense(units=output_data.get_shape()[1], activation="relu")(output_data)

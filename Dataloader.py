@@ -892,6 +892,84 @@ class RNNDataset(abstractDataset):
             print(batch[0][i], "->", batch[1][i], "| ", predicted[i])
 
 
+class Dataset_test(abstractDataset):
+    name = "test"
+    imgsize = (32, 32)
+    glsize = {0:5, 1:10, 2:10, 3:15}
+    def __init__(self, difficulty=0):
+        self.diff = difficulty
+        self.name = "test"+str(self.diff)
+        self.glsize = self.glsize[difficulty]
+
+    def get_batch(self, n):
+        size = self.imgsize[0]
+        radius = 5
+        r = []
+        poses = [(int(i/self.imgsize[0]), i%self.imgsize[1]) for i in range(self.imgsize[0]*self.imgsize[1])]
+        random.shuffle(poses)
+        for i in range(n):
+            img = np.full(self.imgsize, 255, dtype='uint8')
+            if self.diff == 0:
+                # ein kreis
+                pos = [poses[i]]
+                for p in pos:
+                    cv2.circle(img, p, radius, 0, thickness=5)
+            elif self.diff == 1:
+                # zwei kreis, einer links, anderer rechts
+                pos = [random.choice(poses) for unused in range(2)]
+                hs = int(size/2)
+                pos = [(pos[0][0]%hs, pos[0][1]), (pos[1][0]%hs+hs, pos[1][0])]
+                for p in pos:
+                    cv2.circle(img, p, radius, 0, thickness=5)
+            elif self.diff == 2:
+                # zwei kreis
+                pos = [random.choice(poses) for unused in range(2)]
+                for p in pos:
+                    cv2.circle(img, p, radius, 0, thickness=5)
+            elif self.diff == 3:
+                # random(3) kreis
+                tmp = random.choice(list(range(4)))
+                pos = [random.choice(poses) for unused in range(tmp)]
+                for p in pos:
+                    cv2.circle(img, p, radius, 0, thickness=5)
+                pos += [(0, 0)]*(3-tmp)
+            else:
+                print("unsuported difficulty: ", self.diff)
+                return None
+            if self.diff < 4:
+                pos.sort(key=lambda x: x[0])
+                pos = [((x, y), (x, y), radius) for (x, y) in pos]
+                r.append((img, linepoint2dense(pos, x_size=self.imgsize, y_size=self.glsize)))
+        return np.array([d[0] for d in r]), np.array([d[1] for d in r])  # img, goldlabel
+
+    def show(self, batch, predicted=None):
+        """
+        :param batch:
+        :type ([img], [goldlabels])
+        with img is type as in opencCV
+        and goldlabel is [float]
+        e.g. the return value of self.get_batch:
+        x, y = dataset.get_batch(20)
+        dataset.show((x, y))
+        :return:
+        None, but shows the batch and optional predictions
+        """
+        assert len(batch[0]) == len(batch[1])
+        batch = [(np.array(batch[0][i], dtype="uint8"), dense2linepoints(batch[1][i], x_size=self.imgsize)) for i in range(len(batch[0]))]
+        batch = [(img, [linepoint[0] for linepoint in linepoints]) for (img, linepoints) in batch]
+        print("Dataloader.Dataset_test.show: batch = ", getType(batch))
+        for i in range(len(batch)):
+            #print("test_dataset.show: img: "+str(img)+" -> "+str(gl))
+            (img, gl) = batch[i]
+            for point in gl:
+                cv2.circle(img, point, radius=5, color=0, thickness=3)
+            if predicted is not None:
+                for p in dense2linepoints(predicted[i], x_size=self.imgsize):
+                    cv2.circle(img, p[0], radius=5, color=125, thickness=2)
+            cv2.imshow("todo", img)
+            cv2.waitKey(0)
+
+
 class Dataset(abstractDataset):
     """
     The interface to get training data.
@@ -919,7 +997,7 @@ class Dataset(abstractDataset):
         self.img_type = img_type
         self.gl_type = gl_type
 
-        self.line_para_winkel = (3, 5)
+        self.line_para_winkel = (0, 0)  # (3, 5)
         self.do_not_fix_dimensions_just_flip = False
 
         self.gl_encoding = self.gl_encoding[self.gl_type]
