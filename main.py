@@ -370,7 +370,7 @@ if __name__ == "__main__":
             else:
                 print("start training "+savename)
                 model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-                train(model, saveName=savename, dataset=ds_plp, batch_size=256)
+                train(model, saveName=savename, dataset=ds_plp, batch_size=128)
                 del model  # model parameters gets saved by train
                 tf.keras.backend.clear_session()
                 print("finished training "+savename)
