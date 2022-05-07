@@ -98,7 +98,8 @@ def show_trainhistory(history, name="unnamed model"):
 # </debug functions>
 
 
-def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None):
+def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None):
+    #TODO batch size < len(x_train), x_train alle Daten
     start_time = time.time()
     # find better batch_size
     if batch_size is None:
@@ -137,9 +138,10 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
     valLoss = 1
     x_train, y_train = dataset.get_batch(batch_size)
     epochcount = 0
-    long_epochs = 128
-    short_epochs = 4
+    long_epochs = 64
+    short_epochs = 2
     best_model = (valLoss, model.get_weights())
+    fit_batchsize = 32
 
     # train
     while True:
@@ -147,7 +149,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
             # train for long
             print(str(lr) + "L", end=' ')
             backend.set_value(model.optimizer.learning_rate, lr)
-            history_next = model.fit(x_train, y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+            history_next = model.fit(x_train, y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0, batch_size=fit_batchsize).history
             del x_train
             del y_train
             old_lr = -1
@@ -161,7 +163,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val, verbose=0)
+                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val, verbose=0, batch_size=fit_batchsize)
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory.history, model.get_weights())
                 model.set_weights(weights_pre)
@@ -217,6 +219,28 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=None)
     return history
 
 
+def train2(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None):
+    start_time = time.time()
+
+    x_train, y_train = dataset.get_batch(None)
+    train = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+
+    callback = tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss', min_delta=0, patience=30, verbose=0,
+        mode='auto', baseline=None, restore_best_weights=True
+    )
+
+    backend.set_value(model.optimizer.learning_rate, start_lr)
+    history = model.fit(train, epochs=512, callbacks=[callback], validation_data=val, verbose=0, batch_size=batch_size).history
+
+    dt = time.time() - start_time
+    history["trainingtime"] = [dt]
+    print("\n", saveName, " took ", dt, "s to fit to val_loss of ", min(history["val_loss"]))
+    model.save(Dataloader.models_dir + saveName + ".h5")
+    save_dict(history, saveName)
+    show_trainhistory(history, saveName)
+    return history
+
 def infer(name, dataset):
     test_x, test_y = dataset.get_batch(10)
     model = tf.keras.models.load_model(Dataloader.models_dir + name + ".h5")
@@ -239,7 +263,7 @@ def infer(name, dataset):
         pred = model.predict([img])  # returns list of predictions.
         if len(infered) == 0:
             print("main.infer: ", Dataloader.getType(img), " -> ", Dataloader.getType(pred))
-        print("main.infer: pred = ", str(pred).replace("\t", " ").replace("\n", " ").replace("         ", " "))
+        print("main.infer: pred = ", ' '.join(str(pred).replace("\t", " ").replace("\n", " ").split()))
         shape = tuple([x for x in np.array(pred).shape if x > 1])
         pred = np.reshape(pred, shape)
         infered.append(pred)
@@ -264,7 +288,7 @@ def show_models(model, name, dataset):
 
 
     linedetection_models = [("fcff", Models.fullyconnectedFedforward), ("fcff2", Models.fullyconnectedFedforward2), ("cvff", Models.cvff), ("conv", Models.conv), ("vgg11", Models.vgg11)]
-    dataset = Dataloader.Dataset(Dataloader.data_dir, Dataloader.GoldlabelTypes.linepositions, Dataloader.GoldlabelEncodings.dense, img_type=Dataloader.ImgTypes.paragraph)
+    dataset = Dataloader.Dataset(gl_type=Dataloader.GoldlabelTypes.linepositions, img_type=Dataloader.ImgTypes.paragraph)
     x, y = dataset.get_batch(10)
     in_shape = (x[0].shape[0], x[0].shape[1], 1)
     out_length = len(y[0])
@@ -278,7 +302,7 @@ def show_models(model, name, dataset):
         model.fit(x, y, batch_size=1, epochs=1, callbacks=[tensorboard_callback])
         print("\n\n")
     readline_models = [("simpleHTR", Models.simpleHTR), ("simpleHTR2", Models.simpleHTR2)]
-    dataset = Dataloader.Dataset(gl_type=Dataloader.GoldlabelTypes.text, img_type=Dataloader.ImgTypes.line, gl_encoding=Dataloader.GoldlabelEncodings.onehot)
+    dataset = Dataloader.Dataset(gl_type=Dataloader.GoldlabelTypes.text, img_type=Dataloader.ImgTypes.line)
     for (mn, mf) in readline_models:
         print("name = ", mn)
         model = mf(in_shape=(32, 128, 1), out_length=27, activation="hard_sigmoid")
@@ -312,6 +336,8 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
+    # 0. Model das auf 128x128 daten funktioniert hat wiederfinden
+    #       mit runterskalierten großen bildern wieder versuchen
     # 0. model_lp auf echten daten funktionieren machen
     # 0. zeilen und word/zeile an echte Daten anpassen, model_lp dadrauf trainieren.
     # neue NN ansätze:
@@ -349,33 +375,29 @@ if __name__ == "__main__":
             cv2.waitKey(0)
         exit(0)
 
+    for savename in []:  # ["test2_cvff_tanh_hard_sigmoid"]:  # ["Dataset_real(22, 1)_cvff_relu_hard_sigmoid0", "Dataset_real(22, 1)_conv_relu_hard_sigmoid0"]:
+        print("infer: "+savename)
+        #history = read_dict(savename)
+        #show_trainhistory(history, savename)
+        infer(savename, ds_plp)
 
     #train all relevant models
     # training one model works fine.
-    # training multiply models sequentially throus OOM before starting to execute my code.
-    #model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation="hard_sigmoid", loss=keras.losses.MeanSquaredError(), inner_activation="tanh")
-    #train(model, saveName="conv2_tanh_hard_sigmoid", dataset=ds_plp, batch_size=16)
-    #exit(0)
+    # training multiply models sequentially throus OOM. https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
+
     # linepoint
-    # https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
-    for (modelf, modeln) in [(Models.conv, "conv"), (Models.conv2, "conv2")]:  # (Models.conv2, "conv2")
+    for (modelf, modeln) in [(Models.conv, "conv"), (Models.conv2, "conv2")]:
         for inner_activation in ["relu"]:  # , "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
             final_activation = "hard_sigmoid"
             savename = f"{ds_plp.name}_{modeln}_{inner_activation}_{final_activation}"
-            if False:
-                print("infer: "+savename)
-                history = read_dict(savename)
-                show_trainhistory(history, savename)
-                infer(savename, ds_plp)
-            else:
-                print("start training "+savename)
-                model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-                train(model, saveName=savename, dataset=ds_plp, batch_size=128)
-                del model  # model parameters gets saved by train
-                tf.keras.backend.clear_session()
-                print("finished training "+savename)
-
+            print("start training "+savename)
+            model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
+            train2(model, saveName=savename, dataset=ds_plp, batch_size=32)
+            del model  # model parameters gets saved by train
+            tf.keras.backend.clear_session()
+            print("finished training "+savename)
     exit(0)
+
     #htr
     losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working
     for (loss, nm) in losses:

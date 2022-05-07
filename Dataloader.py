@@ -1014,7 +1014,10 @@ class Dataset(abstractDataset):
 
     def get_batch(self, size):
         add_empty_images = False
-        if size >= 6 and self.add_empty_images:
+        if size is None:
+            size = -1
+            add_empty_images = self.add_empty_images
+        elif size >= 6 and self.add_empty_images:
             add_empty_images = True
             size = size-3  # drei leere bilder hinzugefuegt
         #select witch part of dset to use

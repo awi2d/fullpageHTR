@@ -175,7 +175,7 @@ def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mean
 def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError(), inner_activation="relu"):
     assert out_length % Dataloader.linepoint_length == 0  # dense encoding of linepoint has 5 values
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
-    cnn = tf.keras.layers.Rescaling(1./255, input_shape=in_shape)(input_data)  # rescale img to [0, 1]
+    cnn = tf.keras.layers.Rescaling(1./255., input_shape=in_shape)(input_data)  # rescale img to [0, 1]
     cnn = tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1))(cnn)
 
     target_shape = (2*out_length, 1)  # reduce width of image to 1 => (list of image rows -> list of linepoints)
