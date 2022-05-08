@@ -222,8 +222,13 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
 def train2(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None):
     start_time = time.time()
 
-    x_train, y_train = dataset.get_batch(None)
-    train = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+    x_train, y_train = dataset.get_batch(1024)
+    if val is None:
+        val = dataset.get_batch(32)
+    print(f"got training data with x_train = {Dataloader.getType(x_train)}\n and y_train = {Dataloader.getType(y_train)}")
+    train = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(len(x_train))
+    val = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(len(val[0]))
+    print(f"training tf.data.Dataset: {Dataloader.getType(train)}")
 
     callback = tf.keras.callbacks.EarlyStopping(
         monitor='val_loss', min_delta=0, patience=30, verbose=0,
@@ -231,7 +236,8 @@ def train2(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=Non
     )
 
     backend.set_value(model.optimizer.learning_rate, start_lr)
-    history = model.fit(train, epochs=512, callbacks=[callback], validation_data=val, verbose=0, batch_size=batch_size).history
+    # currently has only one step per epoch
+    history = model.fit(train, epochs=512, callbacks=[callback], validation_data=val, verbose=1, batch_size=batch_size).history
 
     dt = time.time() - start_time
     history["trainingtime"] = [dt]

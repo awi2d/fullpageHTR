@@ -140,8 +140,11 @@ def getType(x):
         return 'ndarray('+str(x.shape)+': '+(str(x.dtype) if len(x) > 0 else "Nix")+')'
     if name == 'BatchDataset':
         return str(name)+" : "+str(len(x))
-    if name == "Dataset":
+    if name == "Dataset":  # Dataloader.Dataset
         return "Dataset(name=\""+str(x.name)+"\", "+str(x.imgsize)+"->"+str(x.glsize)+" )"
+    if name == "TensorSliceDataset":  # tf.data.Dataset
+        for elem in x:
+            return "TensorSliceDataset "+str(len(x))+": "+getType(elem)
     if name in ["KerasTensor", "Tensor", "EagerTensor"]:
         return str(name)+"("+str(x.shape)+":"+str(x.dtype)+")"
     return name
