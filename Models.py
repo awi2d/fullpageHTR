@@ -172,6 +172,43 @@ def conv(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.Mean
     return model
 
 
+# das könnte das model sein, das für die kleinen Bilder funktioniert hat.
+def old_conv(in_shape=(32, 32), out_length=6, activation='linear'):
+    # trainable parameters 23,316
+    model = tf.keras.models.Sequential(name="conv")
+    # Layer 1 Conv2D
+    # model.add(Dropout(0.2, input_shape=input_shape))
+    model.add(tf.keras.layers.Rescaling(1./255, input_shape=in_shape))  # rescale img to [0, 1]
+    model.add(tf.keras.layers.Reshape((in_shape[0], in_shape[1], 1)))
+    #model.add(tf.keras.layers.Rescaling(1./127.5, offset=-1, input_shape=in_shape))  # rescale img to [-1, 1]
+    model.add(tf.keras.layers.Conv2D(24, (5, 5), strides=(1, 1), padding="same", activation='tanh', input_shape=in_shape))
+    model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
+    model.add(tf.keras.layers.Dropout(0.4))
+    # Layer 2 Pooling Layer
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.Dropout(0.4))
+    # Layer 3 Conv2D
+    model.add(tf.keras.layers.Conv2D(12, (5, 5), strides=(1, 1), padding="same", activation='tanh'))  #
+    model.add(tf.keras.layers.LeakyReLU(alpha=0.2))
+    model.add(tf.keras.layers.Dropout(0.4))
+    # model.add(BatchNormalization())
+    # Layer 3 Pooling Layer
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.Dropout(0.4))
+    # Layer 4 Conv2D
+    model.add(tf.keras.layers.Conv2D(6, kernel_size=(5, 5), strides=(1, 1), padding="same", activation='tanh'))
+    # Layer 5 Pooling Layer
+    model.add(tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid'))
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(units=120, activation='tanh'))
+    model.add(tf.keras.layers.Dense(units=84, activation='tanh'))
+    model.add(tf.keras.layers.Dense(units=out_length, activation=activation))
+    # compile model
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.5)
+    model.compile(loss=keras.losses.MeanSquaredError(), optimizer=opt)  # metrics=['mean_squared_error']
+    return model
+
+
 def conv2(in_shape, out_length, activation='hard_sigmoid', loss=keras.losses.MeanSquaredError(), inner_activation="relu"):
     assert out_length % Dataloader.linepoint_length == 0  # dense encoding of linepoint has 5 values
     input_data = tf.keras.layers.Input(name="input", shape=in_shape)
@@ -328,6 +365,7 @@ class CTCLoss_scheidel(tf.losses.Loss):
         except ValueError:
             return float('inf')
 #</copied from https://github.com/githubharald/CTCDecoder>
+
 #<copied from https://github.com/tensorflow/tensorflow/issues/35063>
 @tf.function(autograph=False)
 def get_labels(data):
@@ -359,6 +397,7 @@ class CTCLoss_issus(tf.losses.Loss):
             blank_index=self.blank_index
         ))
 #</copied from https://github.com/tensorflow/tensorflow/issues/35063>
+
 
 def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activation='relu'):
     """
@@ -436,7 +475,7 @@ def simpleHTR(in_shape=(32, 256), out_length=len(Dataloader.alphabet), activatio
     """
 
     opt = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.5)
-    model.compile(loss=keras.losses.CategoricalCrossentropy(), optimizer=opt)  # metrics=['mean_squared_error']
+    model.compile(loss="mse", optimizer=opt)  # metrics=['mean_squared_error']
     return model
 
 def htr(in_shape=(32, 256), out_length=len(Dataloader.alphabet), loss=keras.losses.MeanSquaredError()):

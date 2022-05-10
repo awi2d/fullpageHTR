@@ -10,8 +10,8 @@ import random
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 linepoint_length = 5
 
-data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
-#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
+#data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
+data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
 iam_dir = data_dir + "iam/"  # the unchanged iam dataset
 dataset_dir = data_dir + "generated/"  # directoy for storing generated data
 models_dir = data_dir + "models/"  # directoy for storing trained models
@@ -385,7 +385,6 @@ def scale(img, goldlabel, x_size, gl_type):
     """
     if x_size == (None, None):
         return np.array(img, dtype="uint8"), goldlabel
-
     if x_size[0] is None:
         x_size = (int(img.shape[0] * (x_size[1]/img.shape[1])), x_size[1])
     if x_size[1] is None:
@@ -541,7 +540,7 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
             print("Dataloader.concat_data: goldlabel_type ", goldlabel_type, " is not valid")
     elif axis == 1:
         h = max([img.shape[0] for img in img_list])
-        img_list = [np.pad(img_list[i], ((int(np.floor_divide((h-img_list[i].shape[0]),2)), int(np.ceil((h-img_list[i].shape[0])/2))), (pad[i], 0)), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
+        img_list = [np.pad(img_list[i], ((int(np.floor_divide((h-img_list[i].shape[0]), 2)), int(np.ceil((h-img_list[i].shape[0])/2))), (pad[i], 0)), mode='constant', constant_values=255) for i in range(len(img_list))]  # white padding added at bottom
         if goldlabel_type == GoldlabelTypes.text:
             goldlabel = ' '.join(goldlabel_list)+"#"  # # is end-of-line-symbol
         elif goldlabel_type == GoldlabelTypes.linepositions:
@@ -550,7 +549,7 @@ def concat_data(data_sublist, goldlabel_type, axis=0, pad=None):
             # goldlabel_list = [goldlabel]
             #print("goldlabel_list = ", getType(goldlabel_list))  # goldlabel_list =  [3:[1:<3:<2:int; int>; <2:int; int>; int>]]
             hight = max([gl[0][2] for gl in goldlabel_list])  # float
-            startpoint = (goldlabel_list[0][0][0][0], goldlabel_list[0][0][0][1]+np.floor_divide(hight-goldlabel_list[0][0][2], 2))
+            startpoint = (goldlabel_list[0][0][0][0]+pad[0], goldlabel_list[0][0][0][1]+np.floor_divide(hight-goldlabel_list[0][0][2], 2))
             endpoint = (goldlabel_list[-1][0][1][0], goldlabel_list[-1][0][1][1]+np.floor_divide(hight-goldlabel_list[-1][0][2], 2))
             #endpoint = goldlabel_list[-1][0][1]
             widths = [abs(point[0][1][0]-point[0][0][0]) for point in goldlabel_list]
@@ -755,11 +754,12 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
         print("Dataloader.getData(", dir, ", ", dataset_name, ", ", img_type, ", ", maxcount, "): invalid input, goldlabel_type should be ", GoldlabelTypes)
         return None
     # <should_be_parameters_buts_its_more_convenient_to_have_them_here>
-    words_per_line = [2, 3]  # number of words per line should be calculated from (wordimg_size after resizing to height) and y_size or max_chars_per_line
+    words_per_line = [1, 2]  # number of words per line should be calculated from (wordimg_size after resizing to height) and y_size or max_chars_per_line
 
-    word_distance = [10, 20]  # padding added left of each word
-    line_distance = [5, 10]  # padding added upward of each line
-    line_height = int(x_size[0]/max(lines_per_paragrph)-max(line_distance)-random.randint(0, 20))  # default height each word gets rescaled to before forming a line
+    word_distance = list(range(10, 20, 1))  # padding added left of each word
+    line_distance = list(range(5, 10, 1))  # padding added upward of each line
+    line_height = int(random.uniform(0.8, 0.9)*(x_size[0]/max(lines_per_paragrph)-max(line_distance)))  # default height each word gets rescaled to before forming a line
+    assert line_height > 0
     # line_height is only used in word, line and paragrph_img, NOT in lineimg_goldlabel
 
     # TODO y_size[0] when goldlabel_type==text (a.k.a. max_chars_per_line) limit should be obeyed when building lines,
@@ -983,9 +983,10 @@ class Dataset(abstractDataset):
     gl_type = 0
     pos = 0
     dataset_size = -1
-    linecounts = [3, 4, 5]
+    linecounts = [2, 3]  # [3, 4, 5]
     max_chars_per_line = 32
-    imgsize = {ImgTypes.word: (32, 64), ImgTypes.line: (32, 256), ImgTypes.paragraph: (512, 1024)}
+    #imgsize = {ImgTypes.word: (32, 64), ImgTypes.line: (32, 256), ImgTypes.paragraph: (512, 1024)}
+    imgsize = {ImgTypes.word: (32, 64), ImgTypes.line: (32, 256), ImgTypes.paragraph: (128, 256)}
     # TODO wenn glsiz[linepositions] >= 100 (d.h. 20 zeilen) stürzt das Programm nach "Dataloader.Dataset.show: start" ohne Fehlermeldung mit \"Process finished with exit code -1073740791 (0xC0000409)\" ab.
     glsize = {GoldlabelTypes.text: None, GoldlabelTypes.linepositions: max(linecounts)*linepoint_length, GoldlabelTypes.lineimg: np.array((32, 256))}
     gl_encoding = {GoldlabelTypes.text: GoldlabelEncodings.onehot, GoldlabelTypes.linepositions: GoldlabelEncodings.dense, GoldlabelTypes.lineimg: GoldlabelEncodings.dense, GoldlabelTypes.number_of_lines: GoldlabelEncodings.dense}

@@ -219,25 +219,33 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
     return history
 
 
-def train2(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None):
+def train2(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=16):
     start_time = time.time()
-
-    x_train, y_train = dataset.get_batch(1024)
     if val is None:
         val = dataset.get_batch(32)
-    print(f"got training data with x_train = {Dataloader.getType(x_train)}\n and y_train = {Dataloader.getType(y_train)}")
-    train = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(len(x_train))
-    val = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(len(val[0]))
-    print(f"training tf.data.Dataset: {Dataloader.getType(train)}")
+        val = tf.data.Dataset.from_tensor_slices((val[0], val[1])).batch(len(val[0]))
+
+    max_data_that_fits_in_memory = 20000  # sollte von größe der Daten und des freien Speichers abhängen
+
+
+    # train is Batchdataset with elements of shape (batch_size:<x_train[0].shape, y_train[0].shape>)
 
     callback = tf.keras.callbacks.EarlyStopping(
-        monitor='val_loss', min_delta=0, patience=30, verbose=0,
+        monitor='val_loss', min_delta=0, patience=5, verbose=0,
         mode='auto', baseline=None, restore_best_weights=True
     )
+    history = {"loss": [], "val_loss": [], "lr": []}
 
-    backend.set_value(model.optimizer.learning_rate, start_lr)
-    # currently has only one step per epoch
-    history = model.fit(train, epochs=512, callbacks=[callback], validation_data=val, verbose=1, batch_size=batch_size).history
+    for lr in [start_lr]:  # [start_lr*(2**-i) for i in range(4)]:
+        backend.set_value(model.optimizer.learning_rate, lr)
+        x_train, y_train = dataset.get_batch(max_data_that_fits_in_memory)
+        train = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
+        del x_train, y_train
+        tmphistory = model.fit(x=train, epochs=128, callbacks=[callback], validation_data=val, verbose=1).history
+        del train
+        history["loss"] += tmphistory["loss"]
+        history["val_loss"] += tmphistory["val_loss"]
+        history["lr"] += [lr]*len(tmphistory["loss"])
 
     dt = time.time() - start_time
     history["trainingtime"] = [dt]
@@ -342,8 +350,8 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
-    # 0. Model das auf 128x128 daten funktioniert hat wiederfinden
-    #       mit runterskalierten großen bildern wieder versuchen
+    # 0. email an Gold wie model starten
+    # 0. readme
     # 0. model_lp auf echten daten funktionieren machen
     # 0. zeilen und word/zeile an echte Daten anpassen, model_lp dadrauf trainieren.
     # neue NN ansätze:
@@ -367,7 +375,11 @@ if __name__ == "__main__":
     #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    #ds_plp = Dataloader.Dataset_test(2)
+    ds_plp.show(10)
+    model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
+    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t2tfds"
+    train2(model, savename, ds_plp)
+    exit(0)
 
     if False:  # test Dataloader.extractline
         ds = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
@@ -381,9 +393,10 @@ if __name__ == "__main__":
             cv2.waitKey(0)
         exit(0)
 
-    for savename in []:  # ["test2_cvff_tanh_hard_sigmoid"]:  # ["Dataset_real(22, 1)_cvff_relu_hard_sigmoid0", "Dataset_real(22, 1)_conv_relu_hard_sigmoid0"]:
+    for savename in ["Dataset_real(22, 1)_conv2_relu_hard_sigmoid_t2tfds", "Dataset_real(22, 1)_conv_relu_hard_sigmoid_t2tfds"]:  # ["test2_cvff_tanh_hard_sigmoid"]:  # ["Dataset_real(22, 1)_cvff_relu_hard_sigmoid0", "Dataset_real(22, 1)_conv_relu_hard_sigmoid0"]:
         print("infer: "+savename)
         #history = read_dict(savename)
+        #save_dict(history, savename)
         #show_trainhistory(history, savename)
         infer(savename, ds_plp)
 
@@ -392,25 +405,24 @@ if __name__ == "__main__":
     # training multiply models sequentially throus OOM. https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
 
     # linepoint
-    for (modelf, modeln) in [(Models.conv, "conv"), (Models.conv2, "conv2")]:
+    for modelf in [Models.conv, Models.conv2]:
         for inner_activation in ["relu"]:  # , "relu", "elu", "gelu", "hard_sigmoid", "selu", "sigmoid", "swish"]:
             final_activation = "hard_sigmoid"
-            savename = f"{ds_plp.name}_{modeln}_{inner_activation}_{final_activation}"
             print("start training "+savename)
             model = modelf(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, activation=final_activation, loss=keras.losses.MeanSquaredError(), inner_activation=inner_activation)
-            train2(model, saveName=savename, dataset=ds_plp, batch_size=32)
+            savename = f"{ds_plp.name}_{model.name}_{inner_activation}_{final_activation}_t2tfds"
+            train2(model, saveName=savename, dataset=ds_plp, batch_size=4)
             del model  # model parameters gets saved by train
             tf.keras.backend.clear_session()
             print("finished training "+savename)
     exit(0)
 
     #htr
-    losses = [(keras.losses.MeanSquaredError(), "_mse")]  # , CTCLoss(64), "_ctc")]  # TODO CTC loss not working
+    losses = [(Models.CTCLoss_issus(logit_length=ds_ltxt.imgsize[1]//4, blank_index=0), "_ctc"), (keras.losses.MeanSquaredError(), "_mse")]  # TODO CTC loss not working
     for (loss, nm) in losses:
         model_htr = Models.htr(in_shape=ds_ltxt.imgsize, loss=loss)
         train(model_htr, saveName="htr"+nm, dataset=ds_ltxt, batch_size=64)
     print("finished training htr")
-
     exit(0)
 
 
