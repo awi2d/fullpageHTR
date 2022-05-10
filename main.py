@@ -350,8 +350,7 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
-    # 0. email an Gold wie model starten
-    # 0. readme
+    # 0. Readme
     # 0. model_lp auf echten daten funktionieren machen
     # 0. zeilen und word/zeile an echte Daten anpassen, model_lp dadrauf trainieren.
     # neue NN ansätze:
@@ -375,7 +374,6 @@ if __name__ == "__main__":
     #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    ds_plp.show(10)
     model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t2tfds"
     train2(model, savename, ds_plp)

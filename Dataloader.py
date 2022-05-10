@@ -10,8 +10,8 @@ import random
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 linepoint_length = 5
 
-#data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
-data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
+data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
 iam_dir = data_dir + "iam/"  # the unchanged iam dataset
 dataset_dir = data_dir + "generated/"  # directoy for storing generated data
 models_dir = data_dir + "models/"  # directoy for storing trained models
