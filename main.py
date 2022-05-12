@@ -122,7 +122,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
     epochs_without_improvment = 0
     valLoss = 1
     x_train, y_train = dataset.get_batch(max_data_that_fits_in_memory)
-    train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
+    #train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
     epochcount = 0
     long_epochs = 64
     short_epochs = 2
@@ -134,13 +134,14 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
             # train for long
             print(str(lr) + "L", end=' ')
             backend.set_value(model.optimizer.learning_rate, lr)
-            history_next = model.fit(x=train_tfds, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+            #history_next = model.fit(x=train_tfds, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+            history_next = model.fit(x=x_train, y=y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
             del x_train
             del y_train
             old_lr = -1
             older_lr = -2
             x_train, y_train = dataset.get_batch(batch_size)
-            train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
+            #train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
         else:
             # train with different learning rates.
             # print("test lrs = ", [lr*m for m in lr_mult])
@@ -149,7 +150,8 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0)
+                #tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0)
+                tmphistory = model.fit(x=x_train, y=y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory.history, model.get_weights())
                 model.set_weights(weights_pre)
@@ -363,7 +365,7 @@ if __name__ == "__main__":
     model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
     batch_size = 32
     maxdata = 100000
-    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
+    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1{maxdata}_{batch_size}"
     print("train ", savename)
     train(model, savename, ds_plp, batch_size=batch_size, max_data_that_fits_in_memory=maxdata)
     exit(0)
