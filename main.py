@@ -98,28 +98,13 @@ def show_trainhistory(history, name="unnamed model"):
 # </debug functions>
 
 
-def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None):
+def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None, max_data_that_fits_in_memory=100000):
     #TODO batch size < len(x_train), x_train alle Daten
     start_time = time.time()
     # find better batch_size
-    if batch_size is None:
-        batch_size = 8  # batch_size=128 führt mit der (640, 2048)-bildgröße zu einem OOM fehler.
-        cludder = [model.get_weights() for _ in range(4)]
-        while True:
-            batch_size *= 2
-            try:
-                x_train, y_train = dataset.get_batch(batch_size)  # just hope the compiler is not smart enough to optimise this code
-                print("main.train: ", Dataloader.getType(x_train), " -> ", Dataloader.getType(y_train))
-            except:
-                batch_size = int(batch_size/8)
-                break
-        del cludder
-        print("main.train: ", saveName, ": batch_size = ", batch_size)
-        del x_train
-        del y_train
     #init other values
     if val is None or len(val) == 0:
-        val = dataset.get_batch(batch_size)
+        val = dataset.get_batch(128)
     # print("train: ", x_train[0], " -> ", y_train[0])
     #print("x.shape = ", val[0][0].shape)
     #print("y.shape = ", val[1][0].shape)
@@ -136,12 +121,12 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
     older_lr = -2
     epochs_without_improvment = 0
     valLoss = 1
-    x_train, y_train = dataset.get_batch(batch_size)
+    x_train, y_train = dataset.get_batch(max_data_that_fits_in_memory)
+    train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
     epochcount = 0
     long_epochs = 64
     short_epochs = 2
     best_model = (valLoss, model.get_weights())
-    fit_batchsize = 32
 
     # train
     while True:
@@ -149,12 +134,13 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
             # train for long
             print(str(lr) + "L", end=' ')
             backend.set_value(model.optimizer.learning_rate, lr)
-            history_next = model.fit(x_train, y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0, batch_size=fit_batchsize).history
+            history_next = model.fit(x=train_tfds, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
             del x_train
             del y_train
             old_lr = -1
             older_lr = -2
             x_train, y_train = dataset.get_batch(batch_size)
+            train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
         else:
             # train with different learning rates.
             # print("test lrs = ", [lr*m for m in lr_mult])
@@ -163,7 +149,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                tmphistory = model.fit(x_train, y_train, epochs=short_epochs, validation_data=val, verbose=0, batch_size=fit_batchsize)
+                tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0)
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory.history, model.get_weights())
                 model.set_weights(weights_pre)
@@ -225,7 +211,7 @@ def train2(model, saveName, dataset, val=None, start_lr=2**(-8), batch_size=16):
         val = dataset.get_batch(32)
         val = tf.data.Dataset.from_tensor_slices((val[0], val[1])).batch(len(val[0]))
 
-    max_data_that_fits_in_memory = 20000  # sollte von größe der Daten und des freien Speichers abhängen
+    max_data_that_fits_in_memory = 100000  # sollte von größe der Daten und des freien Speichers abhängen
 
 
     # train is Batchdataset with elements of shape (batch_size:<x_train[0].shape, y_train[0].shape>)
@@ -375,8 +361,11 @@ if __name__ == "__main__":
     #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
     model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
-    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t2tfds"
-    train2(model, savename, ds_plp)
+    batch_size = 32
+    maxdata = 100000
+    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
+    print("train ", savename)
+    train(model, savename, ds_plp, batch_size=batch_size, max_data_that_fits_in_memory=maxdata)
     exit(0)
 
     if False:  # test Dataloader.extractline
