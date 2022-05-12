@@ -150,10 +150,10 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                #tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0)
+                #tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0).history
                 tmphistory = model.fit(x=x_train, y=y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
                 # print("history: ", history.history)
-                weigths_post[i] = (tmphistory.history, model.get_weights())
+                weigths_post[i] = (tmphistory, model.get_weights())
                 model.set_weights(weights_pre)
             # pick best learning rate.
             best = 0
@@ -368,6 +368,7 @@ if __name__ == "__main__":
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1{maxdata}_{batch_size}"
     print("train ", savename)
     train(model, savename, ds_plp, batch_size=batch_size, max_data_that_fits_in_memory=maxdata)
+    # without tfds. 0.0569
     exit(0)
 
     if False:  # test Dataloader.extractline
