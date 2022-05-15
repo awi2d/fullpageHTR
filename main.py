@@ -98,7 +98,7 @@ def show_trainhistory(history, name="unnamed model"):
 # </debug functions>
 
 
-def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None, max_data_that_fits_in_memory=100000):
+def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, max_data_that_fits_in_memory=100000):
     #TODO batch size < len(x_train), x_train alle Daten
     start_time = time.time()
     # find better batch_size
@@ -151,7 +151,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=None
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
                 #tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0).history
-                tmphistory = model.fit(x=x_train, y=y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+                tmphistory = model.fit(x=x_train, y=y_train, epochs=short_epochs, callbacks=[callback], validation_data=val, verbose=0).history
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory, model.get_weights())
                 model.set_weights(weights_pre)
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
     model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
-    batch_size = 32
+    batch_size = 16
     maxdata = 100000
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1{maxdata}_{batch_size}"
     print("train ", savename)
