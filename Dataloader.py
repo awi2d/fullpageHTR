@@ -1025,7 +1025,9 @@ class Dataset(abstractDataset):
             add_empty_images = True
             size = size-3  # drei leere bilder hinzugefuegt
         #select witch part of dset to use
-        assert size < self.dataset_size
+        if size >= self.dataset_size:
+            print(f"reset size from{size} to {self.dataset_size-1}")
+            size = self.dataset_size-1
         if self.pos+size >= self.dataset_size:
             self.pos = self.pos % (self.dataset_size-size)
         #print("Dataloader.Dataset.get_batch: self.glsize = ", self.glsize)

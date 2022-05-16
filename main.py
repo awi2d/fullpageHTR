@@ -335,6 +335,19 @@ def external_seg(modelname_lp, modelname_htr, ds_ptxt):
         cv2.waitKey(0)
     return None
 
+def score_all_models(dir):
+    try:
+        from os import listdir
+    except:
+        print("os need to be installed for score_all_models to work.")
+        return
+    trainhist = [str(f).split(".")[0] for f in listdir(dir) if str(f).endswith(".txt") and str(f) != "summarys.txt"]
+    scores = [(hist, read_dict(hist)) for hist in trainhist]
+    scores = [(name, min(hist["val_loss"]), hist["trainingtime"][0]) for (name, hist) in scores]
+    scores.sort(key=lambda x: x[1])
+    print("\n".join([str(s) for s in scores]))
+    exit(0)
+
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
@@ -355,6 +368,7 @@ if __name__ == "__main__":
     # lineRecognition
     # batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
+    #score_all_models(Dataloader.models_dir)
     # init all datasets needed.
     #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
@@ -362,13 +376,12 @@ if __name__ == "__main__":
     #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
     #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
 
-    model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
-    batch_size = 16
+    model = Models.conv(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
+    batch_size = 32
     maxdata = 100000
-    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1{maxdata}_{batch_size}"
+    savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
     print("train ", savename)
     train(model, savename, ds_plp, batch_size=batch_size, max_data_that_fits_in_memory=maxdata)
-    # without tfds. 0.0569
     exit(0)
 
     if False:  # test Dataloader.extractline
