@@ -122,7 +122,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
     epochs_without_improvment = 0
     valLoss = 1
     x_train, y_train = dataset.get_batch(max_data_that_fits_in_memory)
-    #train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
+    train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
     epochcount = 0
     long_epochs = 64
     short_epochs = 2
@@ -134,8 +134,8 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
             # train for long
             print(str(lr) + "L", end=' ')
             backend.set_value(model.optimizer.learning_rate, lr)
-            #history_next = model.fit(x=train_tfds, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
-            history_next = model.fit(x=x_train, y=y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+            history_next = model.fit(x=train_tfds, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+            #history_next = model.fit(x=x_train, y=y_train, epochs=long_epochs, callbacks=[callback], validation_data=val, verbose=0).history
             del x_train
             del y_train
             old_lr = -1
@@ -150,8 +150,8 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
             print(str(lr) + "T", end=' ')
             for i in range(len(lr_mult)):
                 backend.set_value(model.optimizer.learning_rate, lr * lr_mult[i])
-                #tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0).history
-                tmphistory = model.fit(x=x_train, y=y_train, epochs=short_epochs, callbacks=[callback], validation_data=val, verbose=0).history
+                tmphistory = model.fit(x=train_tfds, epochs=short_epochs, validation_data=val, verbose=0).history
+                #tmphistory = model.fit(x=x_train, y=y_train, epochs=short_epochs, callbacks=[callback], validation_data=val, verbose=0).history
                 # print("history: ", history.history)
                 weigths_post[i] = (tmphistory, model.get_weights())
                 model.set_weights(weights_pre)
