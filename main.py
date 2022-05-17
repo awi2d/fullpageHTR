@@ -370,11 +370,9 @@ if __name__ == "__main__":
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
     #score_all_models(Dataloader.models_dir)
     # init all datasets needed.
-    #external_seg("lp_conv", "htr", Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text))
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    #ds_plimg = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.lineimg)
-    #ds_ptxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.text)
-    #ds_ltxt = Dataloader.Dataset(img_type=Dataloader.ImgTypes.line, gl_type=Dataloader.GoldlabelTypes.text)
+
+    # train Model.conv on paragraph image with linepositions
 
     model = Models.conv(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
     batch_size = 32
@@ -395,13 +393,6 @@ if __name__ == "__main__":
             [cv2.imshow("line"+str(li), np.array(limgs[li], dtype="uint8")) for li in range(len(limgs))]
             cv2.waitKey(0)
         exit(0)
-
-    for savename in ["Dataset_real(22, 1)_conv2_relu_hard_sigmoid_t2tfds", "Dataset_real(22, 1)_conv_relu_hard_sigmoid_t2tfds"]:  # ["test2_cvff_tanh_hard_sigmoid"]:  # ["Dataset_real(22, 1)_cvff_relu_hard_sigmoid0", "Dataset_real(22, 1)_conv_relu_hard_sigmoid0"]:
-        print("infer: "+savename)
-        #history = read_dict(savename)
-        #save_dict(history, savename)
-        #show_trainhistory(history, savename)
-        infer(savename, ds_plp)
 
     #train all relevant models
     # training one model works fine.

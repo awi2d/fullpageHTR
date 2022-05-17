@@ -1031,7 +1031,7 @@ class Dataset(abstractDataset):
         if self.pos+size >= self.dataset_size:
             self.pos = self.pos % (self.dataset_size-size)
         #print("Dataloader.Dataset.get_batch: self.glsize = ", self.glsize)
-        data = getData(dir=self.data_directory, dataset_name=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize, y_size=self.glsize, lines_per_paragrph=self.linecounts)
+        data = getData(dir=self.data_directory, dataset_name=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize, y_size=self.glsize, lines_per_paragrph=self.linecounts, offset=self.pos)
         # type of data: [(img, goldlabel)]
         #assert self.imgsize == data[0][0].shape  # assuming all images in data have the same size
         self.pos = self.pos+size
