@@ -768,6 +768,7 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
 
     if dataset_name == DatasetNames.iam:
         data = load_iam(dir, goldlabel_type)  # getType(data) = [(relative path of wordimg file, goldlabel of that file)]
+        random.shuffle(data)
     else:
         raise "invalid dataset_loader: "+str(dataset_name)
     #print("path_gl: ", getType(data))
@@ -996,7 +997,6 @@ class Dataset(abstractDataset):
     #super.y = [float]  # linepoint
 
     def __init__(self, img_type, gl_type):
-        self.name = "Dataset_real("+str(img_type)+", "+str(gl_type)+")"
         self.data_directory = data_dir
         self.img_type = img_type
         self.gl_type = gl_type
@@ -1015,6 +1015,7 @@ class Dataset(abstractDataset):
 
         self.pos = 0
         self.dataset_size = len(load_iam(self.data_directory, gl_type))
+        self.name = f"Dataset_real({str(img_type)}_{str(self.imgsize)}, {str(gl_type)}_{self.glsize})"
 
     def get_batch(self, size):
         add_empty_images = False

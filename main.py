@@ -140,7 +140,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
             del y_train
             old_lr = -1
             older_lr = -2
-            x_train, y_train = dataset.get_batch(batch_size)
+            x_train, y_train = dataset.get_batch(max_data_that_fits_in_memory)
             train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
         else:
             # train with different learning rates.
@@ -371,24 +371,13 @@ if __name__ == "__main__":
 
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
     history = read_dict("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32")
-    val_loss = history["val_loss"]
-    epochs_without_imporvement = 0
-    best = val_loss[0]
-    i = 0
-    for i in range(len(val_loss)):
-        if val_loss[i] < best:
-            print(f"{i}: surpased {best} with {val_loss[i]} after {epochs_without_imporvement}")
-            best = val_loss[i]
-            epochs_without_imporvement = 0
-        epochs_without_imporvement += 1
-    print(f"final: epochcount = {i}, best = {best}, epochs_without_improvement = {epochs_without_imporvement}")
-    exit(0)
     # init all datasets needed.
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    infer("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
+    #infer("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
+
     # train Model.conv on paragraph image with linepositions
 
-    model = Models.conv(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
+    model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
     batch_size = 32
     maxdata = 100000
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
