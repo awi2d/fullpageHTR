@@ -104,7 +104,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
     # find better batch_size
     #init other values
     if val is None or len(val) == 0:
-        val = dataset.get_batch(128)
+        val = dataset.get_batch(512)
     # print("train: ", x_train[0], " -> ", y_train[0])
     #print("x.shape = ", val[0][0].shape)
     #print("y.shape = ", val[1][0].shape)
@@ -141,7 +141,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
             old_lr = -1
             older_lr = -2
             x_train, y_train = dataset.get_batch(batch_size)
-            #train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
+            train_tfds = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size)
         else:
             # train with different learning rates.
             # print("test lrs = ", [lr*m for m in lr_mult])
@@ -168,7 +168,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
             old_lr = lr
             lr = lr * lr_mult[best]
         epochcount += len(history_next['loss'])
-        if history_next['val_loss'][-1] >= best_model[0]:  # in diesem schritt hat sich nichst verbesser
+        if history_next['val_loss'][-1] >= best_model[0]:  # no improvement in this step
             epochs_without_improvment += len(history_next['loss'])
 
         history['val_loss'] = history['val_loss'] + history_next['val_loss']
@@ -184,11 +184,11 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
             history["trainstop"] = ["lr = " + str(lr)]
             print("learning rate to low, stop training " + saveName)
             break
-        if epochs_without_improvment > long_epochs*8:
+        if epochs_without_improvment > long_epochs*1.5:
             history["trainstop"] = ["epochs_without_imporvment = " + str(epochs_without_improvment)]
             print("no imprevment of val_loss, stop training " + saveName)
             break
-        if epochcount >= 16000:
+        if epochcount >= 4000:
             history["trainstop"] = ["epochcount = " + str(epochcount)]
             print("end of loop reached, stop training " + saveName)
             break
@@ -367,11 +367,25 @@ if __name__ == "__main__":
     # ENDZIEL: echte Daten von Gold auslesen
     # lineRecognition
     # batch-normalisation als attention  # https://github.com/Nikolai10/scrabble-gan
+
+
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
-    #score_all_models(Dataloader.models_dir)
+    history = read_dict("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32")
+    val_loss = history["val_loss"]
+    epochs_without_imporvement = 0
+    best = val_loss[0]
+    i = 0
+    for i in range(len(val_loss)):
+        if val_loss[i] < best:
+            print(f"{i}: surpased {best} with {val_loss[i]} after {epochs_without_imporvement}")
+            best = val_loss[i]
+            epochs_without_imporvement = 0
+        epochs_without_imporvement += 1
+    print(f"final: epochcount = {i}, best = {best}, epochs_without_improvement = {epochs_without_imporvement}")
+    exit(0)
     # init all datasets needed.
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-
+    infer("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
     # train Model.conv on paragraph image with linepositions
 
     model = Models.conv(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
@@ -380,6 +394,7 @@ if __name__ == "__main__":
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
     print("train ", savename)
     train(model, savename, ds_plp, batch_size=batch_size, max_data_that_fits_in_memory=maxdata)
+    # Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32  took  186249.77829027176 s to fit to val_loss of  0.024048075079917908
     exit(0)
 
     if False:  # test Dataloader.extractline
@@ -396,7 +411,7 @@ if __name__ == "__main__":
 
     #train all relevant models
     # training one model works fine.
-    # training multiply models sequentially throus OOM. https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
+    # training multiply models sequentially throws OOM. https://stackoverflow.com/questions/42886049/keras-tensorflow-cpu-training-sequential-models-in-loop-eats-memory
 
     # linepoint
     for modelf in [Models.conv, Models.conv2]:
