@@ -370,10 +370,13 @@ if __name__ == "__main__":
 
 
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
-    history = read_dict("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32")
     # init all datasets needed.
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    #infer("Dataset_real(22, 1)_conv_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
+    print("\nconv: ")
+    infer("Dataset_real(22_(128, 256), 1_15)_conv_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
+    print("\nconv2: ")
+    infer("Dataset_real(22_(128, 256), 1_15)_conv2_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
+    exit(0)
 
     # train Model.conv on paragraph image with linepositions
 

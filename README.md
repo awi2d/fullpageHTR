@@ -21,4 +21,9 @@ model names have the format f"{ds.name}_{model.name}_relu_hard_sigmoid_t1tfds{ma
 where ds is a Dataloader.Dataset and model is a tensorflow model. maxdata and batch-size are parameters for the train method.
 
 ## Working Models
-Dataset_real(22_(128, 256), 1_15)_conv_relu_hard_sigmoid_t1tfds100000_32 found the mostly correct line_point on paragraph images
+Dataset_real(22_(128, 256), 1_15)_conv_relu_hard_sigmoid_t1tfds100000_32  took  186249.77829027176 s to fit to val_loss of  0.024048075079917908
+Dataset_real(22_(128, 256), 1_15)_conv2_relu_hard_sigmoid_t1tfds100000_32  took  9632.773826122284 s to fit to val_loss of  0.01800730638206005
+
+Despite the higher val_loss, the results of conv seem to be more accurate than the results of conv2.
+But both models struggle to predict the end of long lines.
+
