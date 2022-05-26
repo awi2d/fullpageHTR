@@ -10,8 +10,8 @@ import random
 line_point = ((int, int), (int, int), int)  # (startpoint of line, endpoint of line, height)
 linepoint_length = 5
 
-#data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
-data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
+data_dir = "../SimpleHTR/data/trainingDataset/"  # The dirctory that is mapped to not be in the docker
+#data_dir = "C:/Users/Idefix/PycharmProjects/SimpleHTR/data/"
 iam_dir = data_dir + "iam/"  # the unchanged iam dataset
 dataset_dir = data_dir + "generated/"  # directoy for storing generated data
 models_dir = data_dir + "models/"  # directoy for storing trained models
@@ -335,13 +335,13 @@ def linepoint2dense(points: [line_point], x_size: (int, int), y_size: int) -> [f
     assert max([max(point[0][1], point[1][1], point[2]) for point in points]) <= x_size[0]
     #print("Dataloader.linepoint2dense: y_size = ", y_size)
     assert y_size >= linepoint_length*len(points)
-    dp = [(xs/x_size[0], ys/x_size[1], xe/x_size[0], ye/x_size[1], h/x_size[1]) for ((xs, ys), (xe, ye), h) in points]
+    dp = [(xs/x_size[1], ys/x_size[0], xe/x_size[1], ye/x_size[0], h/x_size[0]) for ((xs, ys), (xe, ye), h) in points]
     dp = list(sum(dp, ()))  # flattens the list. https://stackoverflow.com/questions/10632839/transform-list-of-tuples-into-a-flat-list-or-a-matrix/35228431
-    assert len(dp) % linepoint_length == 0
+    assert max(dp) <= 1
     return np.array(dp+[0]*(y_size-len(dp)))
 def dense2linepoints(points: [float], x_size:(int, int)) -> [line_point]:
     assert len(points) % linepoint_length == 0
-    return [((int(points[i]*x_size[0]), int(points[i+1]*x_size[1])), (int(points[i+2]*x_size[0]), int(points[i+3]*x_size[1])), max(1, int(points[i+4]*x_size[1]))) for i in range(0, len(points), 5)]
+    return [((int(points[i]*x_size[1]), int(points[i+1]*x_size[0])), (int(points[i+2]*x_size[1]), int(points[i+3]*x_size[0])), max(1, int(points[i+4]*x_size[0]))) for i in range(0, len(points), 5)]
 
 
 def lineimgs2dense(lineimgs, y_size):
@@ -707,7 +707,7 @@ def rotate_img(image, gl, gl_type, angle):
 
 
 def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, goldlabel_type=GoldlabelTypes.text,
-            goldlabel_encoding=GoldlabelEncodings.onehot, x_size=(32, 256), y_size=5, maxcount=-1, offset=0,
+            goldlabel_encoding=GoldlabelEncodings.onehot, x_size=(32, 256), y_size=5, maxcount=-1,
             line_para_winkel=(2, 5), lines_per_paragrph=[3, 4, 5]):
     """
     :param dir:
@@ -768,13 +768,12 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
 
     if dataset_name == DatasetNames.iam:
         data = load_iam(dir, goldlabel_type)  # getType(data) = [(relative path of wordimg file, goldlabel of that file)]
-        random.shuffle(data)
     else:
         raise "invalid dataset_loader: "+str(dataset_name)
     #print("path_gl: ", getType(data))
     #print("data_imgpath_goldlabel = ", data[:5])
-
-    if 0 < maxcount < len(data) and offset+maxcount < len(data):
+    random.shuffle(data)
+    if 0 < maxcount:
         if img_type == ImgTypes.word:
             maxcount = maxcount
         elif img_type == ImgTypes.line:
@@ -785,7 +784,9 @@ def getData(dir, dataset_name=DatasetNames.iam, img_type=ImgTypes.paragraph, gol
             print("unexpected img_type: ", img_type)
             return None
         # remove unused datapoints before loading the images
-        data = data[offset:offset+maxcount]
+        if len(data) < maxcount:
+            data = data+[random.choice(data) for _ in range(maxcount-len(data))]
+        data = data[:maxcount]
     #print("path_gl_short: ", getType(data))
     if goldlabel_type == GoldlabelTypes.lineimg:
         print("Dataloader.getData: y_size = ", y_size)
@@ -983,7 +984,6 @@ class Dataset(abstractDataset):
     data_directory = None
     gl_type = 0
     pos = 0
-    dataset_size = -1
     linecounts = [2, 3]  # [3, 4, 5]
     max_chars_per_line = 32
     #imgsize = {ImgTypes.word: (32, 64), ImgTypes.line: (32, 256), ImgTypes.paragraph: (512, 1024)}
@@ -1001,7 +1001,7 @@ class Dataset(abstractDataset):
         self.img_type = img_type
         self.gl_type = gl_type
 
-        self.line_para_winkel = (0, 0)  # (3, 5)
+        self.line_para_winkel = (3, 5)
         self.do_not_fix_dimensions_just_flip = False
 
         self.gl_encoding = self.gl_encoding[self.gl_type]
@@ -1014,7 +1014,6 @@ class Dataset(abstractDataset):
                 self.glsize = np.array((self.max_chars_per_line, len(alphabet)))
 
         self.pos = 0
-        self.dataset_size = len(load_iam(self.data_directory, gl_type))
         self.name = f"Dataset_real({str(img_type)}_{str(self.imgsize)}, {str(gl_type)}_{self.glsize})"
 
     def get_batch(self, size):
@@ -1026,13 +1025,8 @@ class Dataset(abstractDataset):
             add_empty_images = True
             size = size-3  # drei leere bilder hinzugefuegt
         #select witch part of dset to use
-        if size >= self.dataset_size:
-            print(f"reset size from{size} to {self.dataset_size-1}")
-            size = self.dataset_size-1
-        if self.pos+size >= self.dataset_size:
-            self.pos = self.pos % (self.dataset_size-size)
         #print("Dataloader.Dataset.get_batch: self.glsize = ", self.glsize)
-        data = getData(dir=self.data_directory, dataset_name=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize, y_size=self.glsize, lines_per_paragrph=self.linecounts, offset=self.pos)
+        data = getData(dir=self.data_directory, dataset_name=DatasetNames.iam, img_type=self.img_type, goldlabel_type=self.gl_type, goldlabel_encoding=self.gl_encoding, maxcount=size, line_para_winkel=self.line_para_winkel, x_size=self.imgsize, y_size=self.glsize, lines_per_paragrph=self.linecounts)
         # type of data: [(img, goldlabel)]
         #assert self.imgsize == data[0][0].shape  # assuming all images in data have the same size
         self.pos = self.pos+size
@@ -1049,7 +1043,7 @@ class Dataset(abstractDataset):
             gl = np.zeros(yshape)
             data.append((img, gl))
 
-            img = np.array([[random.randrange(0, 255, 1) for unused in range(self.imgsize[1])] for unused in range(self.imgsize[0])])
+            img = np.array([[random.randrange(0, 255, 1) for _ in range(self.imgsize[1])] for _ in range(self.imgsize[0])])
             #gl = np.array([0]*len(data[0][1]))
             gl = np.zeros(yshape)
             data.append((img, gl))

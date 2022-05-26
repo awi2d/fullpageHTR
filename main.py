@@ -104,7 +104,7 @@ def train(model, saveName, dataset, val=None, start_lr=2**(-10), batch_size=4, m
     # find better batch_size
     #init other values
     if val is None or len(val) == 0:
-        val = dataset.get_batch(512)
+        val = dataset.get_batch(1024)
     # print("train: ", x_train[0], " -> ", y_train[0])
     #print("x.shape = ", val[0][0].shape)
     #print("y.shape = ", val[1][0].shape)
@@ -257,7 +257,7 @@ def infer(name, dataset):
         assert img.shape[0] == input_size[0] and img.shape[1] == input_size[1]
     # [(assert img.shape == input_size) for img in test_x] why, python? I just want to use assert statements in list comprehensions. is that to much?
     infered = []
-    for img in [np.reshape(img, (1, img.shape[0], img.shape[1])) for img in test_x]:
+    for (img, gl) in [(np.reshape(test_x[i], (1, test_x[i].shape[0], test_x[i].shape[1])), test_y[i]) for i in range(len(test_x))]:
         #if img.shape[0] > input_size[0] or img.shape[1] > input_size[1]:
         #    print("img shape = ", img.shape, " and input shape = ", input_size, " should be the same")
         #    print("validation image has to be the same size or smaler than largest training image")
@@ -266,6 +266,7 @@ def infer(name, dataset):
         if len(infered) == 0:
             print("main.infer: ", Dataloader.getType(img), " -> ", Dataloader.getType(pred))
         print("main.infer: pred = ", ' '.join(str(pred).replace("\t", " ").replace("\n", " ").split()))
+        print("main.infer: gold = ", ' '.join(str(gl).replace("\t", " ").replace("\n", " ").split()))
         shape = tuple([x for x in np.array(pred).shape if x > 1])
         pred = np.reshape(pred, shape)
         infered.append(pred)
@@ -351,7 +352,6 @@ def score_all_models(dir):
 
 if __name__ == "__main__":
     # nach linefinder paralelisieren, dann mit FC zu num_lines*char_per_line*(num_chars+blank+linebreak) umwandeln
-    # 0. Readme
     # 0. model_lp auf echten daten funktionieren machen
     # 0. zeilen und word/zeile an echte Daten anpassen, model_lp dadrauf trainieren.
     # neue NN ansätze:
@@ -372,17 +372,11 @@ if __name__ == "__main__":
     print("\n\n"+"-"*64+"start"+"-"*64+"\n\n")
     # init all datasets needed.
     ds_plp = Dataloader.Dataset(img_type=Dataloader.ImgTypes.paragraph, gl_type=Dataloader.GoldlabelTypes.linepositions)
-    print("\nconv: ")
-    infer("Dataset_real(22_(128, 256), 1_15)_conv_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
-    print("\nconv2: ")
-    infer("Dataset_real(22_(128, 256), 1_15)_conv2_relu_hard_sigmoid_t1tfds100000_32", ds_plp)
-    exit(0)
-
     # train Model.conv on paragraph image with linepositions
 
-    model = Models.conv2(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
+    model = Models.conv(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
     batch_size = 32
-    maxdata = 100000
+    maxdata = 200000
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
     print("train ", savename)
     train(model, savename, ds_plp, batch_size=batch_size, max_data_that_fits_in_memory=maxdata)
