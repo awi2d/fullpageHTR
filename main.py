@@ -375,7 +375,7 @@ if __name__ == "__main__":
     # train Model.conv on paragraph image with linepositions
 
     model = Models.conv(in_shape=ds_plp.imgsize, out_length=ds_plp.glsize, inner_activation="relu", activation="hard_sigmoid")
-    batch_size = 32
+    batch_size = 24
     maxdata = 100000
     savename = f"{ds_plp.name}_{model.name}_relu_hard_sigmoid_t1tfds{maxdata}_{batch_size}"
     print("train ", savename)
